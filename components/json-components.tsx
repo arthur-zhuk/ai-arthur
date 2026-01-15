@@ -88,6 +88,54 @@ export function Divider({ element }: ComponentRenderProps) {
   );
 }
 
+export function Resume({ element }: ComponentRenderProps) {
+  const title = element.props.title as string | null | undefined;
+  const href = element.props.href as string;
+
+  return (
+    <div className="jr-resume">
+      <div className="jr-resume-header">
+        <div>
+          <p className="jr-resume-label">Resume</p>
+          <h4 className="jr-resume-title">{title ?? "Arthur Zhuk Resume"}</h4>
+        </div>
+        <a className="jr-resume-link" href={href} target="_blank" rel="noreferrer">
+          Open PDF
+        </a>
+      </div>
+      <iframe
+        className="jr-resume-frame"
+        src={href}
+        title={title ?? "Arthur Zhuk Resume"}
+        loading="lazy"
+      />
+    </div>
+  );
+}
+
+export function InterestGrid({ element }: ComponentRenderProps) {
+  const title = element.props.title as string | null | undefined;
+  const items = element.props.items as string[];
+
+  return (
+    <div className="jr-interest-grid">
+      <div className="jr-interest-header">
+        <p className="jr-interest-label">Beyond the code</p>
+        <h4 className="jr-interest-title">
+          {title ?? "Outside of work"}
+        </h4>
+      </div>
+      <div className="jr-interest-cards">
+        {items.map((item) => (
+          <div key={item} className="jr-interest-card">
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const componentRegistry = {
   Card,
   Heading,
@@ -98,4 +146,6 @@ export const componentRegistry = {
   TagRow,
   Tag,
   Divider,
+  Resume,
+  InterestGrid,
 };

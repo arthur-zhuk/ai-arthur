@@ -63,6 +63,20 @@ export const profileCatalog = createCatalog({
       }),
       description: "Divider",
     },
+    Resume: {
+      props: z.object({
+        title: z.string().nullable(),
+        href: z.string(),
+      }),
+      description: "Resume preview with download link",
+    },
+    InterestGrid: {
+      props: z.object({
+        title: z.string().nullable(),
+        items: z.array(z.string()),
+      }),
+      description: "Grid of personal interests",
+    },
   },
   validation: "strict",
 });

@@ -156,5 +156,13 @@ export const profileData = {
     github: "https://github.com/arthur-zhuk",
     site: "https://www.arthurzh.uk"
   },
-  aiTools: ["Cursor", "Claude Code", "Wispr Flow"]
+  aiTools: ["Cursor", "Claude Code", "Wispr Flow"],
+  interests: [
+    "Building AI products and blockchain products",
+    "Road biking for exploration and adventure",
+    "Ice hockey and basketball",
+    "Competitive League of Legends and mobile games",
+    "Hiking",
+    "Cooking"
+  ]
 };

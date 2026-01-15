@@ -346,6 +346,95 @@ body::before {
   background: var(--border);
 }
 
+.jr-resume {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(15, 17, 26, 0.65);
+}
+
+.jr-resume-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.jr-resume-label {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.jr-resume-title {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.jr-resume-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.jr-resume-frame {
+  width: 100%;
+  height: 420px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #0b0b10;
+}
+
+.jr-interest-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(15, 17, 26, 0.6);
+}
+
+.jr-interest-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jr-interest-label {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.jr-interest-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.jr-interest-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.jr-interest-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 18, 0.7);
+  font-size: 0.85rem;
+}
+
 .muted {
   color: var(--muted);
 }

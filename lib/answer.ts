@@ -19,11 +19,11 @@ export function buildIntroTree(): UITree {
       }),
       node("Text", {
         content:
-          "Currently I lead architecture for travel booking surfaces at Travel Syndicate Technology, with deep React + TypeScript focus.",
+          "Currently I lead architecture for travel booking surfaces at Travel Syndicate Technology while staying hands-on as an individual contributor, with a deep React + TypeScript focus.",
       }),
       node("Text", {
         content:
-          "Ask me anything about my experience, skills, or projects. Here are a few ideas:",
+          "Ask me anything about my experience, skills, or projects.",
         variant: "muted",
       }),
       node(
@@ -211,6 +211,8 @@ function buildContactTree(): UITree {
     ]),
   );
 }
+
+export { buildContactTree };
 
 function buildAiToolsTree(): UITree {
   return createTree(

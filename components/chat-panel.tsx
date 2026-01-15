@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useChat } from "ai/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { UITree } from "@json-render/core";
 import type { Message } from "ai";
-import { buildIntroTree, buildSummaryTree } from "@/lib/answer";
+import { buildContactTree, buildIntroTree, buildSummaryTree } from "@/lib/answer";
 import { buildTreeFromAnswer } from "@/lib/answer-tree";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
@@ -14,6 +14,8 @@ const quickPrompts = [
   "What are your most recent roles?",
   "What tech stack do you focus on?",
   "How can I get in contact with Arthur?",
+  "Show me your resume",
+  "What do you do outside of work?",
   "How do you use AI in your workflow?",
 ];
 
@@ -39,6 +41,8 @@ const followUpBank = {
     "What is the best way to reach you?",
   ],
 };
+
+const MAX_QUESTIONS = 10;
 
 function getFollowUps(question: string) {
   const normalized = question.toLowerCase();
@@ -66,6 +70,7 @@ function getFollowUps(question: string) {
 export default function ChatPanel() {
   const [treeById, setTreeById] = useState<Record<string, UITree>>({});
   const [followUps, setFollowUps] = useState<string[]>([]);
+  const [questionCount, setQuestionCount] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const lastUserQuestionRef = useRef("");
   const introMessage = useMemo(
@@ -73,7 +78,21 @@ export default function ChatPanel() {
     [],
   );
 
-  const { messages, input, setInput, append, isLoading } = useChat({
+  useEffect(() => {
+    const stored = window.localStorage.getItem("question-count");
+    if (stored) {
+      const parsed = Number(stored);
+      if (!Number.isNaN(parsed)) {
+        setQuestionCount(parsed);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("question-count", String(questionCount));
+  }, [questionCount]);
+
+  const { messages, setMessages, input, setInput, append, isLoading } = useChat({
     api: "/api/generate",
     streamProtocol: "text",
     onFinish: (message) => {
@@ -92,11 +111,35 @@ export default function ChatPanel() {
     (promptText: string) => {
       const trimmed = promptText.trim();
       if (!trimmed) return;
+      if (questionCount >= MAX_QUESTIONS) return;
+
+      const nextCount = questionCount + 1;
+      setQuestionCount(nextCount);
       lastUserQuestionRef.current = trimmed;
       setFollowUps([]);
-      append({ role: "user", content: trimmed });
+      const userId = `user-${Date.now()}`;
+
+      if (nextCount >= MAX_QUESTIONS) {
+        const assistantId = `assistant-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          { id: userId, role: "user", content: trimmed },
+          {
+            id: assistantId,
+            role: "assistant",
+            content: "Here is how to reach Arthur.",
+          },
+        ]);
+        setTreeById((prev) => ({
+          ...prev,
+          [assistantId]: buildContactTree(),
+        }));
+        return;
+      }
+
+      append({ role: "user", content: trimmed, id: userId });
     },
-    [append],
+    [append, questionCount],
   );
 
   const handleSend = useCallback(() => {
@@ -155,6 +198,7 @@ export default function ChatPanel() {
     [introMessage, messages],
   );
   const lastMessage = messages[messages.length - 1];
+  const isLocked = questionCount >= MAX_QUESTIONS;
 
   return (
     <section className="chat-panel">
@@ -226,6 +270,13 @@ export default function ChatPanel() {
             <div className="chip-row">{followUpButtons}</div>
           </div>
         ) : null}
+        {isLocked ? (
+          <div className="followup-row">
+            <p className="followup-label">
+              You have reached the question limit. Please reach out directly.
+            </p>
+          </div>
+        ) : null}
 
         <footer className="chat-input">
           <textarea
@@ -234,12 +285,12 @@ export default function ChatPanel() {
             onKeyDown={handleKeyDown}
             placeholder="Ask about experience, skills, or projects..."
             rows={2}
-            disabled={isLoading}
+            disabled={isLoading || isLocked}
           />
           <button
             type="button"
             onClick={handleSend}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || isLocked}
           >
             {isLoading ? "Sending..." : "Send"}
           </button>

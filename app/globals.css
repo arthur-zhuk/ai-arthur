@@ -194,6 +194,11 @@ body::before {
   line-height: 1.5;
 }
 
+.bubble-assistant:has(.jr-resume) {
+  max-width: min(760px, 100%);
+  width: min(760px, 100%);
+}
+
 .bubble-user {
   background: rgba(255, 122, 89, 0.2);
   border: 1px solid rgba(255, 122, 89, 0.4);

@@ -1,15 +1,10 @@
 "use client";
 
-import {
-  useMemo,
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-  startTransition,
-} from "react";
+import { useMemo, useState, useCallback, useRef } from "react";
+import { useChat } from "ai/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { UITree } from "@json-render/core";
+import type { Message } from "ai";
 import { buildIntroTree, buildSummaryTree } from "@/lib/answer";
 import { buildTreeFromAnswer } from "@/lib/answer-tree";
 import ChatBackground from "@/components/chat-background";
@@ -67,150 +62,47 @@ function getFollowUps(question: string) {
   return followUpBank.general;
 }
 
-type ChatMessage = {
-  id: string;
-  role: "assistant" | "user";
-  text?: string;
-  tree?: UITree;
-};
 
 export default function ChatPanel() {
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    { id: "intro", role: "assistant", tree: buildIntroTree() },
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [treeById, setTreeById] = useState<Record<string, UITree>>({});
   const [followUps, setFollowUps] = useState<string[]>([]);
-  const messageCounter = useRef(0);
   const endRef = useRef<HTMLDivElement | null>(null);
-  const streamBufferRef = useRef("");
-  const streamTimerRef = useRef<number | null>(null);
+  const lastUserQuestionRef = useRef("");
+  const introMessage = useMemo(
+    () => ({ id: "intro", role: "assistant", tree: buildIntroTree() }),
+    [],
+  );
 
-  const scrollToEnd = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToEnd();
-  }, [messages, scrollToEnd]);
-
-  const sendPrompt = useCallback(async (promptText: string) => {
-    const trimmed = promptText.trim();
-    if (!trimmed) return;
-
-    setIsLoading(true);
-    setFollowUps([]);
-    const userMessage: ChatMessage = {
-      id: `user-${(messageCounter.current += 1)}`,
-      role: "user",
-      text: trimmed,
-    };
-    const assistantMessage: ChatMessage = {
-      id: `assistant-${(messageCounter.current += 1)}`,
-      role: "assistant",
-      text: "Thinking...",
-    };
-
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
-
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: trimmed }),
-      });
-
-      if (!response.ok || !response.body) {
-        const data = await response.json().catch(() => null);
-        const tree = data?.tree as UITree | undefined;
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === assistantMessage.id
-              ? { ...message, text: undefined, tree: tree ?? buildSummaryTree() }
-              : message,
-          ),
-        );
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
-
-      if (streamTimerRef.current) {
-        window.clearInterval(streamTimerRef.current);
-      }
-      streamBufferRef.current = "";
-
-      streamTimerRef.current = window.setInterval(() => {
-        if (!streamBufferRef.current) return;
-        const buffered = streamBufferRef.current;
-        startTransition(() => {
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === assistantMessage.id
-                ? { ...message, text: buffered }
-                : message,
-            ),
-          );
-        });
-      }, 80);
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        if (!chunk) continue;
-        fullText += chunk;
-        streamBufferRef.current = fullText;
-      }
-
-      if (streamTimerRef.current) {
-        window.clearInterval(streamTimerRef.current);
-        streamTimerRef.current = null;
-      }
-
-      const tree = fullText.trim()
-        ? buildTreeFromAnswer(trimmed, fullText)
+  const { messages, input, setInput, append, isLoading } = useChat({
+    api: "/api/generate",
+    streamProtocol: "text",
+    onFinish: (message) => {
+      const question = lastUserQuestionRef.current;
+      const tree = message.content.trim()
+        ? buildTreeFromAnswer(question || "Answer", message.content)
         : buildSummaryTree();
 
-      startTransition(() => {
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === assistantMessage.id
-              ? { ...message, text: undefined, tree }
-              : message,
-          ),
-        );
-      });
+      setTreeById((prev) => ({ ...prev, [message.id]: tree }));
+      setFollowUps(getFollowUps(question));
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    },
+  });
 
-      setFollowUps(getFollowUps(trimmed));
-    } catch (error) {
-      console.error("Chat error", error);
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === assistantMessage.id
-            ? {
-                ...message,
-                text: undefined,
-                tree: buildSummaryTree(),
-              }
-            : message,
-        ),
-      );
-    } finally {
-      if (streamTimerRef.current) {
-        window.clearInterval(streamTimerRef.current);
-        streamTimerRef.current = null;
-      }
-      setIsLoading(false);
-    }
-  }, []);
+  const sendPrompt = useCallback(
+    (promptText: string) => {
+      const trimmed = promptText.trim();
+      if (!trimmed) return;
+      lastUserQuestionRef.current = trimmed;
+      setFollowUps([]);
+      append({ role: "user", content: trimmed });
+    },
+    [append],
+  );
 
   const handleSend = useCallback(() => {
     sendPrompt(input);
     setInput("");
-  }, [input, sendPrompt]);
+  }, [input, sendPrompt, setInput]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -237,7 +129,7 @@ export default function ChatPanel() {
           {prompt}
         </button>
       )),
-    [sendPrompt],
+    [sendPrompt, setInput],
   );
 
   const followUpButtons = useMemo(
@@ -255,8 +147,14 @@ export default function ChatPanel() {
           {prompt}
         </button>
       )),
-    [followUps, sendPrompt],
+    [followUps, sendPrompt, setInput],
   );
+
+  const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
+    () => [introMessage, ...messages],
+    [introMessage, messages],
+  );
+  const lastMessage = messages[messages.length - 1];
 
   return (
     <section className="chat-panel">
@@ -276,7 +174,7 @@ export default function ChatPanel() {
 
         <div className="chat-thread">
           <JSONUIProvider registry={componentRegistry}>
-            {messages.map((message, index) => (
+            {combinedMessages.map((message, index) => (
               <div
                 key={message.id}
                 className={`chat-message chat-message-${message.role}`}
@@ -285,21 +183,39 @@ export default function ChatPanel() {
                 }}
               >
                 {message.role === "user" ? (
-                  <div className="bubble bubble-user">{message.text}</div>
+                  <div className="bubble bubble-user">
+                    {(message as Message).content ?? ""}
+                  </div>
                 ) : (
                   <div className="bubble bubble-assistant">
-                    {message.tree ? (
+                    {"tree" in message && message.tree ? (
                       <Renderer
                         tree={message.tree}
                         registry={componentRegistry}
                       />
+                    ) : treeById[message.id] ? (
+                      <Renderer
+                        tree={treeById[message.id]}
+                        registry={componentRegistry}
+                      />
                     ) : (
-                      <p className="jr-text jr-text-muted">{message.text}</p>
+                      <p className="jr-text jr-text-muted">
+                        {(message as Message).content?.trim()
+                          ? (message as Message).content
+                          : "Thinking..."}
+                      </p>
                     )}
                   </div>
                 )}
               </div>
             ))}
+            {isLoading && lastMessage?.role === "user" ? (
+              <div className="chat-message chat-message-assistant">
+                <div className="bubble bubble-assistant">
+                  <p className="jr-text jr-text-muted">Thinking...</p>
+                </div>
+              </div>
+            ) : null}
             <div ref={endRef} />
           </JSONUIProvider>
         </div>

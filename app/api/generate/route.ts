@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { openai } from "@ai-sdk/openai";
+import { streamText } from "ai";
 import { profileData } from "@/lib/profile-data";
 import { buildSummaryTree } from "@/lib/answer";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 const profileContext = JSON.stringify(profileData, null, 2);
 
@@ -24,17 +20,8 @@ PROFILE DATA:
 ${profileContext}
 `;
 
-function buildMessages(prompt: string): ChatCompletionMessageParam[] {
-  return [
-    { role: "system", content: systemPrompt },
-    {
-      role: "user",
-      content: `User question: ${prompt}
-
-Write a concise answer (2-4 sentences) followed by a short list of evidence bullets if helpful.
-If you need more info to answer, ask 1 clarifying question.`,
-    },
-  ];
+function buildPrompt(prompt: string) {
+  return `${systemPrompt}\n\nUser question: ${prompt}\n\nWrite a concise answer (2-4 sentences) followed by a short list of evidence bullets if helpful.\nIf you need more info to answer, ask 1 clarifying question.`;
 }
 
 export async function POST(request: Request) {
@@ -47,42 +34,24 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    const prompt =
+      typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((message: { role?: string; content?: string }) => message.role === "user");
+    const resolvedPrompt = prompt || (lastUserMessage?.content ?? "").trim();
 
-    if (!prompt) {
+    if (!resolvedPrompt) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    const stream = await openai.chat.completions.create({
-      model: "gpt-5-nano",
-      messages: buildMessages(prompt),
-      stream: true,
+    const result = await streamText({
+      model: openai("gpt-5-nano"),
+      prompt: buildPrompt(resolvedPrompt),
     });
 
-    const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            const delta = chunk.choices[0]?.delta?.content ?? "";
-            if (delta) {
-              controller.enqueue(encoder.encode(delta));
-            }
-          }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
-
-    return new Response(readable, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-      },
-    });
+    return result.toTextStreamResponse();
   } catch (error) {
     console.error("Generate error", error);
     return NextResponse.json({ tree: buildSummaryTree() });

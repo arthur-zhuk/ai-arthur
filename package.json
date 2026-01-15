@@ -1,0 +1,32 @@
+{
+  "name": "arthur-profile-chat",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@json-render/core": "^0.2.0",
+    "@json-render/react": "^0.2.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "next": "16.1.2",
+    "openai": "^4.72.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "three": "^0.182.0",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "typescript": "5.5.3"
+  },
+  "overrides": {
+    "zod": "^4.3.5"
+  }
+}

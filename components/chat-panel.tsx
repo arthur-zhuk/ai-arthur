@@ -167,6 +167,11 @@ export default function ChatPanel() {
           onClick={() => {
             sendPrompt(prompt);
             setInput("");
+            if (window.matchMedia("(max-width: 768px)").matches) {
+              requestAnimationFrame(() => {
+                endRef.current?.scrollIntoView({ behavior: "smooth" });
+              });
+            }
           }}
         >
           {prompt}
@@ -185,6 +190,11 @@ export default function ChatPanel() {
           onClick={() => {
             sendPrompt(prompt);
             setInput("");
+            if (window.matchMedia("(max-width: 768px)").matches) {
+              requestAnimationFrame(() => {
+                endRef.current?.scrollIntoView({ behavior: "smooth" });
+              });
+            }
           }}
         >
           {prompt}

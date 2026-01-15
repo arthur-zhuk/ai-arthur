@@ -192,6 +192,8 @@ body::before {
   padding: 16px 18px;
   max-width: min(520px, 90%);
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .bubble-assistant:has(.jr-resume) {

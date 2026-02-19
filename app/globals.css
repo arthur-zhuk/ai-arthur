@@ -72,6 +72,9 @@ body::before {
   box-shadow: var(--shadow);
   animation: riseIn 0.6s ease both;
   overflow: hidden;
+  /* Safari overflow: hidden clipping fix */
+  transform: translateZ(0);
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
 }
 
 .chat-bg {
@@ -113,7 +116,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
 }
 
@@ -167,7 +170,7 @@ body::before {
 }
 
 .chat-thread {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   overflow-y: auto;
   display: flex;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect, memo } from "react";
 import { useChat } from "ai/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { UITree } from "@json-render/core";
@@ -67,6 +67,42 @@ function getFollowUps(question: string) {
   return followUpBank.general;
 }
 
+const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: number, tree?: UITree }) => {
+  return (
+    <div
+      className={`chat-message chat-message-${message.role}`}
+      style={{
+        animationDelay: `${index * 40}ms`,
+      }}
+    >
+      {message.role === "user" ? (
+        <div className="bubble bubble-user">
+          {message.content ?? ""}
+        </div>
+      ) : (
+        <div className="bubble bubble-assistant">
+          {"tree" in message && message.tree ? (
+            <Renderer
+              tree={message.tree}
+              registry={componentRegistry}
+            />
+          ) : tree ? (
+            <Renderer
+              tree={tree}
+              registry={componentRegistry}
+            />
+          ) : (
+            <p className="jr-text jr-text-muted">
+              {message.content?.trim()
+                ? message.content
+                : "Thinking..."}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
 export default function ChatPanel() {
   const [treeById, setTreeById] = useState<Record<string, UITree>>({});
@@ -284,39 +320,12 @@ export default function ChatPanel() {
         <div className="chat-thread">
           <JSONUIProvider registry={componentRegistry}>
             {combinedMessages.map((message, index) => (
-              <div
+              <ChatMessageItem
                 key={message.id}
-                className={`chat-message chat-message-${message.role}`}
-                style={{
-                  animationDelay: `${index * 40}ms`,
-                }}
-              >
-                {message.role === "user" ? (
-                  <div className="bubble bubble-user">
-                    {(message as Message).content ?? ""}
-                  </div>
-                ) : (
-                  <div className="bubble bubble-assistant">
-                    {"tree" in message && message.tree ? (
-                      <Renderer
-                        tree={message.tree}
-                        registry={componentRegistry}
-                      />
-                    ) : treeById[message.id] ? (
-                      <Renderer
-                        tree={treeById[message.id]}
-                        registry={componentRegistry}
-                      />
-                    ) : (
-                      <p className="jr-text jr-text-muted">
-                        {(message as Message).content?.trim()
-                          ? (message as Message).content
-                          : "Thinking..."}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+                message={message}
+                index={index}
+                tree={treeById[message.id]}
+              />
             ))}
             {isLoading && lastMessage?.role === "user" ? (
               <div className="chat-message chat-message-assistant">

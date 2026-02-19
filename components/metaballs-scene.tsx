@@ -3,6 +3,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { audioManager } from "@/lib/audio-manager";
 
 const TRAIL_LENGTH = 15;
 
@@ -17,6 +18,7 @@ const float PI = acos(-1.0);
 uniform float uTime;
 uniform vec2 uResolution;
 uniform vec2 uPointerTrail[TRAIL_LENGTH];
+uniform float uAudioLevel;
 
 varying vec2 vTexCoord;
 
@@ -72,10 +74,13 @@ float sdSphere(vec3 p, float s)
 }
 
 float map(vec3 p) {
-    float baseRadius = 8e-3;
+    float baseRadius = 8e-3 * (1.0 + uAudioLevel * 2.5);
     float radius = baseRadius * float(TRAIL_LENGTH);
     float k = 7.;
     float d = 1e5;
+
+    float audioWobble = sin(p.x * 20.0 + uTime * 2.0) * sin(p.y * 20.0 + uTime * 2.0) * sin(p.z * 20.0 + uTime * 2.0);
+    float displacement = audioWobble * (uAudioLevel * 0.15);
 
     for (int i = 0; i < TRAIL_LENGTH; i++) {
         float fi = float(i);
@@ -84,12 +89,12 @@ float map(vec3 p) {
         float sphere = sdSphere(
                 translate(p, vec3(pointerTrail, .0)),
                 radius - baseRadius * fi
-            );
+            ) + displacement * fi * 0.1;
 
         d = smoothMin(d, sphere, k);
     }
 
-    float sphere = sdSphere(translate(p, vec3(1.0, -0.25, 0.0)), 0.55);
+    float sphere = sdSphere(translate(p, vec3(1.0, -0.25, 0.0)), 0.55 + uAudioLevel * 0.15) + displacement * 5.0;
     d = smoothMin(d, sphere, k);
 
     return d;
@@ -106,13 +111,15 @@ vec3 generateNormal(vec3 p) {
 vec3 dropletColor(vec3 normal, vec3 rayDir) {
     vec3 reflectDir = reflect(rayDir, normal);
 
-    float noisePosTime = noise3D(reflectDir * 2.0 + uTime);
-    float noiseNegTime = noise3D(reflectDir * 2.0 - uTime);
+    float noisePosTime = noise3D(reflectDir * 2.0 + uTime + uAudioLevel * 2.0);
+    float noiseNegTime = noise3D(reflectDir * 2.0 - uTime - uAudioLevel * 2.0);
 
-    vec3 _color0 = vec3(0.1765, 0.1255, 0.2275) * noisePosTime;
-    vec3 _color1 = vec3(0.4118, 0.4118, 0.4157) * noiseNegTime;
+    float audioBump = pow(uAudioLevel, 2.0);
 
-    float intensity = 2.3;
+    vec3 _color0 = vec3(0.1765 + audioBump * 0.8, 0.1255, 0.2275 + audioBump * 0.5) * noisePosTime;
+    vec3 _color1 = vec3(0.4118 - audioBump * 0.2, 0.4118 + audioBump * 0.4, 0.4157 + audioBump * 0.6) * noiseNegTime;
+
+    float intensity = 2.3 + uAudioLevel * 5.0;
     vec3 color = (_color0 + _color1) * intensity;
 
     return color;
@@ -168,6 +175,7 @@ function MetaballPlane() {
       uTime: { value: 0 },
       uResolution: { value: new THREE.Vector2(size.width, size.height) },
       uPointerTrail: { value: pointerTrailRef.current },
+      uAudioLevel: { value: 0 },
     }),
     [size.width, size.height],
   );
@@ -177,19 +185,46 @@ function MetaballPlane() {
   }, [size.width, size.height, uniforms]);
 
   useEffect(() => {
+    const el = document.querySelector('.chat-panel');
+    let rect = el?.getBoundingClientRect();
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (el) {
+        rect = el.getBoundingClientRect();
+      }
+    });
+
+    if (el) {
+      resizeObserver.observe(el);
+    }
+
     const handleMove = (event: PointerEvent) => {
-      const x = (event.clientX / window.innerWidth) * 2 - 1;
-      const y = -(event.clientY / window.innerHeight) * 2 + 1;
-      pointerRef.current.set(x, y);
+      if (rect) {
+        // Calculate pointer relative to the chat panel center
+        const localX = event.clientX - (rect.left + rect.width / 2);
+        const localY = event.clientY - (rect.top + rect.height / 2);
+        const x = localX / (rect.width / 2);
+        const y = -(localY / (rect.height / 2));
+        pointerRef.current.set(x, y);
+      } else {
+        // Fallback to window tracking
+        const x = (event.clientX / window.innerWidth) * 2 - 1;
+        const y = -(event.clientY / window.innerHeight) * 2 + 1;
+        pointerRef.current.set(x, y);
+      }
     };
 
     window.addEventListener("pointermove", handleMove, { passive: true });
-    return () => window.removeEventListener("pointermove", handleMove);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      resizeObserver.disconnect();
+    };
   }, []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock, pointer }) => {
     if (!materialRef.current) return;
     materialRef.current.uniforms.uTime.value = clock.elapsedTime;
+    materialRef.current.uniforms.uAudioLevel.value = audioManager.getAverageFrequency();
     const trail = pointerTrailRef.current;
     for (let i = TRAIL_LENGTH - 1; i > 0; i -= 1) {
       trail[i].copy(trail[i - 1]);
@@ -218,6 +253,9 @@ export default function MetaballsScene() {
         dpr={[1, 1.5]}
         gl={{ antialias: true, powerPreference: "high-performance" }}
         frameloop="always"
+        camera={{ position: [0, 0, 1] }}
+        eventSource={typeof window !== 'undefined' ? document.getElementById('root') || document.body : undefined}
+        eventPrefix="client"
       >
         <MetaballPlane />
       </Canvas>

@@ -9,6 +9,7 @@ import { buildContactTree, buildIntroTree, buildSummaryTree } from "@/lib/answer
 import { buildTreeFromAnswer } from "@/lib/answer-tree";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
+import { audioManager, type AudioState } from "@/lib/audio-manager";
 
 const quickPrompts = [
   "What are your most recent roles?",
@@ -78,14 +79,35 @@ export default function ChatPanel() {
     [],
   );
 
+  const [audioState, setAudioState] = useState<AudioState>("paused");
+
   useEffect(() => {
-    const stored = window.localStorage.getItem("question-count");
-    if (stored) {
-      const parsed = Number(stored);
-      if (!Number.isNaN(parsed)) {
-        setQuestionCount(parsed);
-      }
-    }
+    return audioManager.subscribe(setAudioState);
+  }, []);
+
+  useEffect(() => {
+    let interacted = false;
+
+    // Browsers block autoplay without user interaction.
+    // We wait for the first click, touch, or keypress to start the audio.
+    const handleInteraction = () => {
+      if (interacted) return;
+      interacted = true;
+      
+      // We don't call toggle here, just play, so it doesn't conflict with the Play button
+      audioManager.play();
+    };
+
+    const events = ['click', 'keydown', 'pointerdown'];
+    events.forEach(event => {
+      document.addEventListener(event, handleInteraction, { once: true });
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, handleInteraction);
+      });
+    };
   }, []);
 
   useEffect(() => {
@@ -215,13 +237,46 @@ export default function ChatPanel() {
       <ChatBackground />
       <div className="chat-content">
         <header className="chat-header">
-          <div>
-            <p className="eyebrow">Ask Arthur</p>
-            <h2>Arthur Zhuk</h2>
-            <p className="muted">
-              Welcome to my profile. Ask anything about my experience, skills,
-              or the teams I've worked with.
-            </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <p className="eyebrow">Ask Arthur</p>
+              <h2>Arthur Zhuk</h2>
+              <p className="muted">
+                Welcome to my profile. Ask anything about my experience, skills,
+                or the teams I've worked with.
+              </p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+              {audioState === "playing" ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", animation: "fadeSlide 0.3s ease both" }}>
+                  <div className="audio-bars">
+                    <span className="bar"></span>
+                    <span className="bar"></span>
+                    <span className="bar"></span>
+                  </div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontStyle: "italic" }}>
+                    Arthur of Silver Lake
+                  </span>
+                </div>
+              ) : null}
+              <button 
+                className="chip" 
+                onClick={() => audioManager.toggle()}
+                style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", margin: 0 }}
+              >
+                {audioState === "playing" ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    <span>Pause</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span>Play</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           <div className="chip-row">{promptButtons}</div>
         </header>

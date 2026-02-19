@@ -68,7 +68,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  min-height: min(70vh, 720px);
+  height: min(85vh, 800px);
   box-shadow: var(--shadow);
   animation: riseIn 0.6s ease both;
   overflow: hidden;
@@ -444,6 +444,29 @@ body::before {
 
 .muted {
   color: var(--muted);
+}
+
+.audio-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.audio-bars .bar {
+  width: 3px;
+  background-color: var(--accent);
+  animation: bounce 1.2s ease-in-out infinite;
+  border-radius: 2px;
+}
+
+.audio-bars .bar:nth-child(1) { animation-delay: 0s; height: 100%; }
+.audio-bars .bar:nth-child(2) { animation-delay: -0.2s; height: 70%; }
+.audio-bars .bar:nth-child(3) { animation-delay: -0.4s; height: 80%; }
+
+@keyframes bounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
 }
 
 @keyframes riseIn {

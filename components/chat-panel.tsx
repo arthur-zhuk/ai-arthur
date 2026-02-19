@@ -237,8 +237,8 @@ export default function ChatPanel() {
       <ChatBackground />
       <div className="chat-content">
         <header className="chat-header">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
+          <div className="chat-header-top">
+            <div className="chat-header-text">
               <p className="eyebrow">Ask Arthur</p>
               <h2>Arthur Zhuk</h2>
               <p className="muted">
@@ -246,7 +246,7 @@ export default function ChatPanel() {
                 or the teams I've worked with.
               </p>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+            <div className="chat-header-audio">
               {audioState === "playing" ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", animation: "fadeSlide 0.3s ease both" }}>
                   <div className="audio-bars">
@@ -254,7 +254,7 @@ export default function ChatPanel() {
                     <span className="bar"></span>
                     <span className="bar"></span>
                   </div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontStyle: "italic" }}>
+                  <span className="audio-title">
                     Arthur of Silver Lake
                   </span>
                 </div>

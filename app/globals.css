@@ -19,12 +19,13 @@
 
 body {
   margin: 0;
+  padding: 0;
   font-family: var(--font-sans), "Space Grotesk", system-ui, sans-serif;
   background: radial-gradient(circle at top left, #1c122b 0%, #0f111a 45%),
     radial-gradient(circle at 70% 10%, rgba(255, 122, 89, 0.2), transparent 45%),
     linear-gradient(130deg, #0f111a 30%, #13172a 100%);
   color: var(--text);
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 body::before {
@@ -40,11 +41,11 @@ body::before {
 .page {
   position: relative;
   z-index: 1;
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 48px 20px;
+  padding: 24px 16px;
 }
 
 .page-center {
@@ -146,11 +147,17 @@ body::before {
   flex-shrink: 0;
 }
 
+.followup-inline {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid transparent;
+}
+
 .followup-label {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.12em;
   color: var(--muted);
 }
 
@@ -526,28 +533,29 @@ body::before {
 @media (max-width: 768px) {
   .page {
     padding: 0;
-    height: 100dvh;
     min-height: 100dvh;
+    height: 100dvh;
     align-items: stretch;
   }
   .page-center {
     width: 100%;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     display: flex;
-    flex-direction: column;
   }
   .chat-panel {
-    padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
-    height: 100%;
+    padding: calc(12px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
     flex: 1;
+    min-height: 0;
     border-radius: 0;
     border: none;
   }
   .chat-header h2 {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
   .chat-header .muted {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
   }
   .chat-header-top {
     gap: 8px;
@@ -556,12 +564,16 @@ body::before {
     display: none;
   }
   .chip-row {
-    margin-top: 10px;
+    margin-top: 8px;
     gap: 6px;
   }
   .chip {
     padding: 6px 10px;
     font-size: 0.7rem;
+  }
+  .followup-inline {
+    padding-top: 10px;
+    margin-top: 0;
   }
 }
 

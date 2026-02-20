@@ -3,10 +3,9 @@
 import { useMemo, useState, useCallback, useRef, useEffect, memo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { createSpecStreamCompiler } from "@json-render/core";
+import { nestedToFlat } from "@json-render/core";
 import type { Message } from "ai";
-import { buildContactTree, buildIntroTree, buildSummaryTree } from "@/lib/answer";
-import { buildTreeFromAnswer } from "@/lib/answer-tree";
+import { buildContactTree, buildIntroTree } from "@/lib/answer";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
@@ -153,11 +152,6 @@ export default function ChatPanel() {
   const { messages, setMessages, input, setInput, append, isLoading } = useChat({
     api: "/api/generate",
     streamProtocol: "text",
-    onResponse: () => {
-      const id = `assistant-${Date.now()}`;
-      // Initialize compiler for new message
-      compilerRef.current = createSpecStreamCompiler();
-    },
   });
 
   const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
@@ -184,11 +178,7 @@ export default function ChatPanel() {
         setMessages((prev) => [
           ...prev,
           { id: userId, role: "user", content: trimmed },
-          {
-            id: assistantId,
-            role: "assistant",
-            content: "Here is how to reach Arthur.",
-          },
+          { id: assistantId, role: "assistant", content: "Here is how to reach Arthur." },
         ]);
         setTreeById((prev) => ({
           ...prev,
@@ -263,32 +253,24 @@ export default function ChatPanel() {
     [followUps, sendPrompt, setInput],
   );
 
-  const compilerRef = useRef<ReturnType<typeof createSpecStreamCompiler> | null>(null);
-  const lastProcessedLengthRef = useRef(0);
-  const lastProcessedIdRef = useRef<string | null>(null);
-
-  // Hook into AI SDK's stream rendering to parse JSON incrementally
   const lastMessageContent = lastMessage?.role === 'assistant' ? lastMessage.content : '';
   
   useEffect(() => {
-    if (lastMessage?.role === 'assistant' && compilerRef.current) {
-      if (lastProcessedIdRef.current !== lastMessage.id) {
-        lastProcessedLengthRef.current = 0;
-        lastProcessedIdRef.current = lastMessage.id;
-      }
-      
-      const newContent = lastMessageContent.slice(lastProcessedLengthRef.current);
-      if (newContent) {
-        try {
-          const { result } = compilerRef.current.push(newContent);
-          lastProcessedLengthRef.current = lastMessageContent.length;
-          if (result) {
-            setTreeById(prev => ({ ...prev, [lastMessage.id]: result as any }));
-          }
-        } catch (e) {
-          // Ignore JSON parse errors during streaming
-        }
-      }
+    if (lastMessage?.role !== 'assistant' || !lastMessageContent.trim()) return;
+    const trimmed = lastMessageContent.trim();
+    if (!trimmed.startsWith('{')) return;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== 'object') return;
+      let spec: any;
+      if (typeof parsed.root === 'string' && parsed.elements && typeof parsed.elements === 'object') {
+        spec = parsed;
+      } else if (parsed.type && typeof parsed.type === 'string') {
+        spec = nestedToFlat(parsed);
+      } else return;
+      setTreeById(prev => ({ ...prev, [lastMessage.id]: spec }));
+    } catch {
+      // Incomplete JSON during streaming
     }
   }, [lastMessageContent, lastMessage?.role, lastMessage?.id]);
 
@@ -366,23 +348,22 @@ export default function ChatPanel() {
                 </div>
               </div>
             ) : null}
+            {followUps.length > 0 ? (
+              <div className="followup-row followup-inline">
+                <p className="followup-label">Try asking</p>
+                <div className="chip-row">{followUpButtons}</div>
+              </div>
+            ) : null}
+            {isLocked ? (
+              <div className="followup-row followup-inline">
+                <p className="followup-label">
+                  You have reached the question limit. Please reach out directly.
+                </p>
+              </div>
+            ) : null}
             <div ref={endRef} />
           </JSONUIProvider>
         </div>
-
-        {followUps.length > 0 ? (
-          <div className="followup-row">
-            <p className="followup-label">Try asking</p>
-            <div className="chip-row">{followUpButtons}</div>
-          </div>
-        ) : null}
-        {isLocked ? (
-          <div className="followup-row">
-            <p className="followup-label">
-              You have reached the question limit. Please reach out directly.
-            </p>
-          </div>
-        ) : null}
 
         <footer className="chat-input">
           <textarea

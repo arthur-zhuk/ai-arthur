@@ -17,15 +17,27 @@
   box-sizing: border-box;
 }
 
+html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100dvh;
+}
+
 body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+body {
   font-family: var(--font-sans), "Space Grotesk", system-ui, sans-serif;
   background: radial-gradient(circle at top left, #1c122b 0%, #0f111a 45%),
     radial-gradient(circle at 70% 10%, rgba(255, 122, 89, 0.2), transparent 45%),
     linear-gradient(130deg, #0f111a 30%, #13172a 100%);
   color: var(--text);
-  min-height: 100dvh;
 }
 
 body::before {
@@ -39,17 +51,21 @@ body::before {
 }
 
 .page {
-  position: relative;
+  position: fixed;
+  inset: 0;
   z-index: 1;
-  min-height: 100dvh;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .page-center {
-  width: min(860px, 100%);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .eyebrow {
@@ -62,18 +78,14 @@ body::before {
 
 .chat-panel {
   position: relative;
-  padding: 28px;
-  border-radius: calc(var(--radius) + 4px);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  height: min(85vh, 800px);
-  box-shadow: var(--shadow);
-  animation: riseIn 0.6s ease both;
+  padding: 20px;
+  background: var(--surface);
   overflow: hidden;
-  /* Safari overflow: hidden clipping fix */
   transform: translateZ(0);
   -webkit-mask-image: -webkit-radial-gradient(white, black);
 }
@@ -530,25 +542,27 @@ body::before {
   }
 }
 
-@media (max-width: 768px) {
+@media (min-width: 769px) {
   .page {
-    padding: 0;
-    min-height: 100dvh;
-    height: 100dvh;
-    align-items: stretch;
+    padding: 8px;
+    align-items: center;
+    justify-content: center;
   }
   .page-center {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
-    display: flex;
+    height: min(calc(100dvh - 16px), 800px);
+    border-radius: calc(var(--radius) + 4px);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
   }
   .chat-panel {
-    padding: calc(12px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
-    flex: 1;
-    min-height: 0;
-    border-radius: 0;
-    border: none;
+    border-radius: inherit;
+    padding: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-panel {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   .chat-header h2 {
     font-size: 1.35rem;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef, useEffect, memo } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect, memo, Component, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
@@ -44,6 +44,16 @@ const followUpBank = {
 
 const MAX_QUESTIONS = 10;
 
+class RenderErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error) { console.error("[Chat] Renderer error:", error.message, error); }
+  render() {
+    if (this.state.hasError) return this.props.fallback ?? <p className="jr-text jr-text-muted">Failed to render response</p>;
+    return this.props.children;
+  }
+}
+
 function getFollowUps(question: string) {
   const normalized = question.toLowerCase();
   if (normalized.includes("contact") || normalized.includes("email")) {
@@ -66,7 +76,10 @@ function getFollowUps(question: string) {
   return followUpBank.general;
 }
 
-const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: number, tree?: any }) => {
+const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: any, index: number, tree?: any, isLoading?: boolean }) => {
+  const isJsonLike = (s: string) => /^\s*(\{|\`\`\`)/.test(s);
+  const hasContent = !!(message.content?.trim());
+  
   return (
     <div
       className={`chat-message chat-message-${message.role}`}
@@ -81,20 +94,28 @@ const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: n
       ) : (
         <div className="bubble bubble-assistant">
           {"tree" in message && message.tree ? (
-            <Renderer
-              spec={message.tree}
-              registry={componentRegistry}
-            />
+            <RenderErrorBoundary>
+              <Renderer
+                spec={message.tree}
+                registry={componentRegistry}
+              />
+            </RenderErrorBoundary>
           ) : tree ? (
-            <Renderer
-              spec={tree}
-              registry={componentRegistry}
-            />
+            <RenderErrorBoundary>
+              <Renderer
+                spec={tree}
+                registry={componentRegistry}
+              />
+            </RenderErrorBoundary>
           ) : (
             <p className="jr-text jr-text-muted">
-              {message.content?.trim() && !message.content.trim().startsWith('{')
+              {hasContent && !isJsonLike(message.content)
                 ? message.content
-                : "Thinking..."}
+                : isLoading
+                  ? "Thinking..."
+                  : hasContent
+                    ? "Couldn't display response"
+                    : "Thinking..."}
             </p>
           )}
         </div>
@@ -149,10 +170,15 @@ export default function ChatPanel() {
     window.localStorage.setItem("question-count", String(questionCount));
   }, [questionCount]);
 
-  const { messages, setMessages, input, setInput, append, isLoading } = useChat({
+  const { messages, setMessages, input, setInput, append, isLoading, error } = useChat({
     api: "/api/generate",
     streamProtocol: "text",
+    onError: (err) => console.error("[Chat] API error:", err),
   });
+
+  useEffect(() => {
+    if (error) console.error("[Chat] useChat error:", error.message, error);
+  }, [error]);
 
   const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
     () => [introMessage, ...messages],
@@ -258,21 +284,33 @@ export default function ChatPanel() {
   useEffect(() => {
     if (lastMessage?.role !== 'assistant' || !lastMessageContent.trim()) return;
     const trimmed = lastMessageContent.trim();
-    if (!trimmed.startsWith('{')) return;
+    let jsonStr = trimmed;
+    const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlock) jsonStr = codeBlock[1].trim();
+    else if (!trimmed.startsWith('{') && !trimmed.startsWith('```')) return;
     try {
-      const parsed = JSON.parse(trimmed);
-      if (!parsed || typeof parsed !== 'object') return;
+      const parsed = JSON.parse(jsonStr);
+      if (!parsed || typeof parsed !== 'object') {
+        if (!isLoading) console.warn("[Chat] Parsed JSON is not an object:", typeof parsed);
+        return;
+      }
       let spec: any;
       if (typeof parsed.root === 'string' && parsed.elements && typeof parsed.elements === 'object') {
         spec = parsed;
       } else if (parsed.type && typeof parsed.type === 'string') {
         spec = nestedToFlat(parsed);
-      } else return;
+      } else {
+        if (!isLoading) console.warn("[Chat] Unknown spec format. Has root:", 'root' in parsed, "has type:", 'type' in parsed, "keys:", Object.keys(parsed).slice(0, 5));
+        return;
+      }
       setTreeById(prev => ({ ...prev, [lastMessage.id]: spec }));
-    } catch {
-      // Incomplete JSON during streaming
+    } catch (e) {
+      if (!isLoading) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn("[Chat] JSON parse failed:", msg, "Content preview:", jsonStr.slice(0, 200));
+      }
     }
-  }, [lastMessageContent, lastMessage?.role, lastMessage?.id]);
+  }, [lastMessageContent, lastMessage?.role, lastMessage?.id, isLoading]);
 
   useEffect(() => {
     if (!isLoading && lastMessage?.role === 'assistant') {
@@ -339,6 +377,7 @@ export default function ChatPanel() {
                 message={message}
                 index={index}
                 tree={treeById[message.id]}
+                isLoading={isLoading}
               />
             ))}
             {isLoading && lastMessage?.role === "user" ? (

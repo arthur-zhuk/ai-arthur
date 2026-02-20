@@ -3,9 +3,11 @@ import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { profileData } from "@/lib/profile-data";
 import { buildSummaryTree } from "@/lib/answer";
-// import { profileCatalog } from "@/lib/catalog";
 
 const profileContext = JSON.stringify(profileData, null, 2);
+
+const COMPONENTS =
+  "Card, Text, Heading, List, ListItem, TagRow, Tag, Divider, Link, Resume, InterestGrid, Counter";
 
 const systemPrompt = `You are an assistant that answers questions about Arthur Zhuk.
 Use only the provided profile data. Be specific and concrete. Avoid generic hiring
@@ -19,10 +21,23 @@ say "based on his experience" rather than guessing.
 
 PROFILE DATA:
 ${profileContext}
-`;
+
+Respond with a JSON spec using this flat format: { "root": "<key>", "elements": { "<key>": { "key": "<key>", "type": "<Component>", "props": {...}, "children": [], "parentKey": "<parent-key>" } } }
+Available components: ${COMPONENTS}
+- Card: props { title?, subtitle? }, children
+- Text: props { content, variant? }
+- Heading: props { text, level? }
+- List: children are ListItem
+- ListItem: props { content, meta?, href? }
+- TagRow: children are Tag
+- Tag: props { text }
+- Divider: props { label? }
+- Link: props { label, href }
+
+Output ONLY valid JSON. No markdown, no code fences, no explanatory text.`;
 
 function buildPrompt(prompt: string) {
-  return `${systemPrompt}\n\nUser question: ${prompt}\n\nPlease respond by generating a UI using the components in the catalog to answer the question. Your entire response must be a valid JSON representation of the UI tree.`;
+  return `${systemPrompt}\n\nUser question: ${prompt}`;
 }
 
 export async function POST(req: Request) {

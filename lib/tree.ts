@@ -1,4 +1,4 @@
-import type { UITree } from "@json-render/core";
+import type { Spec } from "@json-render/core";
 
 type Node = {
   type: string;
@@ -6,8 +6,8 @@ type Node = {
   children?: Node[];
 };
 
-export function createTree(rootNode: Node): UITree {
-  const elements: UITree["elements"] = {};
+export function createTree(rootNode: Node): Spec {
+  const elements: Record<string, any> = {};
   let counter = 0;
 
   const walk = (node: Node, parentKey: string | null): string => {

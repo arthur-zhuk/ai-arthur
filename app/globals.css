@@ -523,13 +523,14 @@ body::before {
 
 @media (max-width: 768px) {
   .page {
-    padding: 16px 12px;
+    padding: 0;
   }
   .chat-panel {
     padding: 20px 16px;
-    height: calc(100vh - 32px);
-    height: calc(100svh - 32px);
-    border-radius: 20px;
+    height: 100vh;
+    height: 100svh;
+    border-radius: 0;
+    border: none;
   }
   .chat-header h2 {
     font-size: 1.5rem;

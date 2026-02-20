@@ -1,8 +1,12 @@
-import type { ComponentRenderProps } from "@json-render/react";
+"use client";
 
-export function Card({ element, children }: ComponentRenderProps) {
-  const title = element.props.title as string | null | undefined;
-  const subtitle = element.props.subtitle as string | null | undefined;
+import { defineRegistry, type ComponentRenderProps } from "@json-render/react";
+import { profileCatalog } from "@/lib/catalog";
+import { useState } from "react";
+
+function Card({ props, children }: any) {
+  const title = props.title as string | undefined | null;
+  const subtitle = props.subtitle as string | undefined | null;
 
   return (
     <div className="jr-card">
@@ -13,9 +17,9 @@ export function Card({ element, children }: ComponentRenderProps) {
   );
 }
 
-export function Heading({ element }: ComponentRenderProps) {
-  const level = (element.props.level as string | null) ?? "h3";
-  const text = element.props.text as string;
+function Heading({ props }: any) {
+  const level = (props.level as string | undefined | null) ?? "h3";
+  const text = props.text as string;
   const Tag = (["h2", "h3", "h4"].includes(level) ? level : "h3") as
     | "h2"
     | "h3"
@@ -24,23 +28,23 @@ export function Heading({ element }: ComponentRenderProps) {
   return <Tag className="jr-heading">{text}</Tag>;
 }
 
-export function Text({ element }: ComponentRenderProps) {
-  const variant = (element.props.variant as string | null) ?? "body";
-  const content = element.props.content as string;
+function Text({ props }: any) {
+  const variant = (props.variant as string | undefined | null) ?? "body";
+  const content = props.content as string;
 
   const className = `jr-text${variant ? ` jr-text-${variant}` : ""}`;
 
   return <p className={className}>{content}</p>;
 }
 
-export function List({ children }: ComponentRenderProps) {
+function List({ children }: any) {
   return <ul className="jr-list">{children}</ul>;
 }
 
-export function ListItem({ element }: ComponentRenderProps) {
-  const content = element.props.content as string;
-  const meta = element.props.meta as string | null | undefined;
-  const href = element.props.href as string | null | undefined;
+function ListItem({ props }: any) {
+  const content = props.content as string;
+  const meta = props.meta as string | undefined | null;
+  const href = props.href as string | undefined | null;
   const label = href ? (
     <a className="jr-link-inline" href={href} target="_blank" rel="noreferrer">
       {content}
@@ -57,9 +61,9 @@ export function ListItem({ element }: ComponentRenderProps) {
   );
 }
 
-export function Link({ element }: ComponentRenderProps) {
-  const label = element.props.label as string;
-  const href = element.props.href as string;
+function Link({ props }: any) {
+  const label = props.label as string;
+  const href = props.href as string;
 
   return (
     <a className="jr-link" href={href} target="_blank" rel="noreferrer">
@@ -68,16 +72,16 @@ export function Link({ element }: ComponentRenderProps) {
   );
 }
 
-export function TagRow({ children }: ComponentRenderProps) {
+function TagRow({ children }: any) {
   return <div className="jr-tag-row">{children}</div>;
 }
 
-export function Tag({ element }: ComponentRenderProps) {
-  return <span className="jr-tag">{element.props.text as string}</span>;
+function Tag({ props }: any) {
+  return <span className="jr-tag">{props.text as string}</span>;
 }
 
-export function Divider({ element }: ComponentRenderProps) {
-  const label = element.props.label as string | null | undefined;
+function Divider({ props }: any) {
+  const label = props.label as string | undefined | null;
 
   return (
     <div className="jr-divider">
@@ -88,9 +92,9 @@ export function Divider({ element }: ComponentRenderProps) {
   );
 }
 
-export function Resume({ element }: ComponentRenderProps) {
-  const title = element.props.title as string | null | undefined;
-  const href = element.props.href as string;
+function Resume({ props }: any) {
+  const title = props.title as string | undefined | null;
+  const href = props.href as string;
 
   return (
     <div className="jr-resume">
@@ -113,9 +117,9 @@ export function Resume({ element }: ComponentRenderProps) {
   );
 }
 
-export function InterestGrid({ element }: ComponentRenderProps) {
-  const title = element.props.title as string | null | undefined;
-  const items = element.props.items as string[];
+function InterestGrid({ props }: any) {
+  const title = props.title as string | undefined | null;
+  const items = props.items as string[];
 
   return (
     <div className="jr-interest-grid">
@@ -136,16 +140,39 @@ export function InterestGrid({ element }: ComponentRenderProps) {
   );
 }
 
-export const componentRegistry = {
-  Card,
-  Heading,
-  Text,
-  List,
-  ListItem,
-  Link,
-  TagRow,
-  Tag,
-  Divider,
-  Resume,
-  InterestGrid,
-};
+function Counter({ props }: any) {
+  const initialValue = (props.initialValue as number) ?? 0;
+  const [count, setCount] = useState(initialValue);
+
+  return (
+    <div className="jr-counter" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <button 
+        onClick={() => setCount(c => c - 1)}
+        style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}
+      >-</button>
+      <span style={{ minWidth: '40px', textAlign: 'center', fontWeight: 'bold' }}>{count}</span>
+      <button 
+        onClick={() => setCount(c => c + 1)}
+        style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}
+      >+</button>
+    </div>
+  );
+}
+
+export const { registry: componentRegistry } = defineRegistry(profileCatalog, {
+  components: {
+    Card: Card as any,
+    Heading: Heading as any,
+    Text: Text as any,
+    List: List as any,
+    ListItem: ListItem as any,
+    Link: Link as any,
+    TagRow: TagRow as any,
+    Tag: Tag as any,
+    Divider: Divider as any,
+    Resume: Resume as any,
+    InterestGrid: InterestGrid as any,
+    Counter: Counter as any,
+  },
+  actions: {}
+});

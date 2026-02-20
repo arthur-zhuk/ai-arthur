@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef, useEffect, memo } from "react";
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import type { UITree } from "@json-render/core";
+import { createSpecStreamCompiler } from "@json-render/core";
 import type { Message } from "ai";
 import { buildContactTree, buildIntroTree, buildSummaryTree } from "@/lib/answer";
 import { buildTreeFromAnswer } from "@/lib/answer-tree";
@@ -67,7 +67,7 @@ function getFollowUps(question: string) {
   return followUpBank.general;
 }
 
-const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: number, tree?: UITree }) => {
+const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: number, tree?: any }) => {
   return (
     <div
       className={`chat-message chat-message-${message.role}`}
@@ -83,12 +83,12 @@ const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: n
         <div className="bubble bubble-assistant">
           {"tree" in message && message.tree ? (
             <Renderer
-              tree={message.tree}
+              spec={message.tree}
               registry={componentRegistry}
             />
           ) : tree ? (
             <Renderer
-              tree={tree}
+              spec={tree}
               registry={componentRegistry}
             />
           ) : (
@@ -105,13 +105,13 @@ const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: n
 });
 
 export default function ChatPanel() {
-  const [treeById, setTreeById] = useState<Record<string, UITree>>({});
+  const [treeById, setTreeById] = useState<Record<string, any>>({});
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [questionCount, setQuestionCount] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const lastUserQuestionRef = useRef("");
   const introMessage = useMemo(
-    () => ({ id: "intro", role: "assistant", tree: buildIntroTree() }),
+    () => ({ id: "intro", role: "assistant", content: "intro", tree: buildIntroTree() }),
     [],
   );
 
@@ -153,17 +153,19 @@ export default function ChatPanel() {
   const { messages, setMessages, input, setInput, append, isLoading } = useChat({
     api: "/api/generate",
     streamProtocol: "text",
-    onFinish: (message) => {
-      const question = lastUserQuestionRef.current;
-      const tree = message.content.trim()
-        ? buildTreeFromAnswer(question || "Answer", message.content)
-        : buildSummaryTree();
-
-      setTreeById((prev) => ({ ...prev, [message.id]: tree }));
-      setFollowUps(getFollowUps(question));
-      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    onResponse: () => {
+      const id = `assistant-${Date.now()}`;
+      // Initialize compiler for new message
+      compilerRef.current = createSpecStreamCompiler();
     },
   });
+
+  const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
+    () => [introMessage, ...messages],
+    [introMessage, messages],
+  );
+  const lastMessage = messages[messages.length - 1];
+  const isLocked = questionCount >= MAX_QUESTIONS;
 
   const sendPrompt = useCallback(
     (promptText: string) => {
@@ -190,14 +192,14 @@ export default function ChatPanel() {
         ]);
         setTreeById((prev) => ({
           ...prev,
-          [assistantId]: buildContactTree(),
+          [assistantId]: buildContactTree() as any,
         }));
         return;
       }
 
       append({ role: "user", content: trimmed, id: userId });
     },
-    [append, questionCount],
+    [append, questionCount, setMessages],
   );
 
   const handleSend = useCallback(() => {
@@ -261,63 +263,82 @@ export default function ChatPanel() {
     [followUps, sendPrompt, setInput],
   );
 
-  const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
-    () => [introMessage, ...messages],
-    [introMessage, messages],
-  );
-  const lastMessage = messages[messages.length - 1];
-  const isLocked = questionCount >= MAX_QUESTIONS;
+  const compilerRef = useRef<ReturnType<typeof createSpecStreamCompiler> | null>(null);
+
+  // Hook into AI SDK's stream rendering to parse JSON incrementally
+  const lastMessageContent = lastMessage?.role === 'assistant' ? lastMessage.content : '';
+  
+  useEffect(() => {
+    if (isLoading && lastMessage?.role === 'assistant' && compilerRef.current) {
+      try {
+        const { result } = compilerRef.current.push(lastMessageContent);
+        if (result) {
+          setTreeById(prev => ({ ...prev, [lastMessage.id]: result as any }));
+        }
+      } catch (e) {
+        // Ignore JSON parse errors during streaming
+      }
+    }
+  }, [lastMessageContent, isLoading, lastMessage?.role, lastMessage?.id]);
+
+  useEffect(() => {
+    if (!isLoading && lastMessage?.role === 'assistant') {
+       const question = lastUserQuestionRef.current;
+       setFollowUps(getFollowUps(question));
+       endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [isLoading, lastMessage]);
 
   return (
     <section className="chat-panel">
       <ChatBackground />
       <div className="chat-content">
-        <header className="chat-header">
-          <div className="chat-header-top">
-            <div className="chat-header-text">
-              <p className="eyebrow">Ask Arthur</p>
-              <h2>Arthur Zhuk</h2>
-              <p className="muted">
-                Welcome to my profile. Ask anything about my experience, skills,
-                or the teams I've worked with.
-              </p>
-            </div>
-            <div className="chat-header-audio">
-              {audioState === "playing" ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", animation: "fadeSlide 0.3s ease both" }}>
-                  <div className="audio-bars">
-                    <span className="bar"></span>
-                    <span className="bar"></span>
-                    <span className="bar"></span>
-                  </div>
-                  <span className="audio-title">
-                    Arthur of Silver Lake
-                  </span>
-                </div>
-              ) : null}
-              <button 
-                className="chip" 
-                onClick={() => audioManager.toggle()}
-                style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", margin: 0 }}
-              >
-                {audioState === "playing" ? (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                    <span>Pause</span>
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    <span>Play</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-          <div className="chip-row">{promptButtons}</div>
-        </header>
-
         <div className="chat-thread">
+          <header className="chat-header">
+            <div className="chat-header-top">
+              <div className="chat-header-text">
+                <p className="eyebrow">Ask Arthur</p>
+                <h2>Arthur Zhuk</h2>
+                <p className="muted">
+                  Welcome to my profile. Ask anything about my experience, skills,
+                  or the teams I've worked with.
+                </p>
+              </div>
+              <div className="chat-header-audio">
+                {audioState === "playing" ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", animation: "fadeSlide 0.3s ease both" }}>
+                    <div className="audio-bars">
+                      <span className="bar"></span>
+                      <span className="bar"></span>
+                      <span className="bar"></span>
+                    </div>
+                    <span className="audio-title">
+                      Arthur of Silver Lake
+                    </span>
+                  </div>
+                ) : null}
+                <button 
+                  className="chip" 
+                  onClick={() => audioManager.toggle()}
+                  style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", margin: 0 }}
+                >
+                  {audioState === "playing" ? (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                      <span>Pause</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                      <span>Play</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="chip-row">{promptButtons}</div>
+          </header>
+
           <JSONUIProvider registry={componentRegistry}>
             {combinedMessages.map((message, index) => (
               <ChatMessageItem

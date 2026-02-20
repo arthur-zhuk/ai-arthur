@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { profileData } from "@/lib/profile-data";
 import { buildSummaryTree } from "@/lib/answer";
+// import { profileCatalog } from "@/lib/catalog";
 
 const profileContext = JSON.stringify(profileData, null, 2);
 
@@ -21,10 +22,10 @@ ${profileContext}
 `;
 
 function buildPrompt(prompt: string) {
-  return `${systemPrompt}\n\nUser question: ${prompt}\n\nWrite a concise answer (2-4 sentences) followed by a short list of evidence bullets if helpful.\nIf you need more info to answer, ask 1 clarifying question.`;
+  return `${systemPrompt}\n\nUser question: ${prompt}\n\nPlease respond by generating a UI using the components in the catalog to answer the question. Your entire response must be a valid JSON representation of the UI tree.`;
 }
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const body = await req.json();
     const prompt =
       typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const messages = Array.isArray(body?.messages) ? body.messages : [];
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     const result = await streamText({
-      model: openai("gpt-5-nano"),
+      model: openai("gpt-4o-mini"),
       prompt: buildPrompt(resolvedPrompt),
     });
 

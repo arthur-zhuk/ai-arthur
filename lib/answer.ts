@@ -1,6 +1,7 @@
-import type { UITree } from "@json-render/core";
+// import type { UITree } from "@json-render/core";
 import { createTree, node } from "@/lib/tree";
 import { profileData } from "@/lib/profile-data";
+import type { Spec } from "@json-render/core";
 
 const quickTopics = [
   "Experience",
@@ -10,7 +11,7 @@ const quickTopics = [
   "AI tools",
 ];
 
-export function buildIntroTree(): UITree {
+export function buildIntroTree(): Spec {
   return createTree(
     node("Card", { title: "Arthur Zhuk", subtitle: profileData.title }, [
       node("Text", {
@@ -37,7 +38,7 @@ export function buildIntroTree(): UITree {
   );
 }
 
-export function buildAnswerTree(question: string): UITree {
+export function buildAnswerTree(question: string): Spec {
   const normalized = question.toLowerCase();
 
   if (matches(normalized, ["experience", "role", "company", "work", "career"])) {
@@ -71,7 +72,7 @@ function matches(input: string, keywords: string[]): boolean {
   return keywords.some((keyword) => input.includes(keyword));
 }
 
-export function buildSummaryTree(): UITree {
+export function buildSummaryTree(): Spec {
   return createTree(
     node("Card", { title: "Quick summary", subtitle: profileData.title }, [
       node("Text", { content: profileData.tagline }),
@@ -90,7 +91,7 @@ export function buildSummaryTree(): UITree {
   );
 }
 
-function buildAboutTree(): UITree {
+function buildAboutTree(): Spec {
   return createTree(
     node("Card", { title: "About Arthur" }, [
       ...profileData.about.map((paragraph) =>
@@ -100,7 +101,7 @@ function buildAboutTree(): UITree {
   );
 }
 
-function buildExperienceTree(): UITree {
+function buildExperienceTree(): Spec {
   const experienceNodes = profileData.experience.flatMap((role, index) => {
     const blocks = [
       node("Heading", { text: `${role.title} - ${role.company}`, level: "h3" }),
@@ -135,7 +136,7 @@ function buildExperienceTree(): UITree {
   );
 }
 
-function buildSkillsTree(): UITree {
+function buildSkillsTree(): Spec {
   return createTree(
     node("Card", { title: "Skills and focus" }, [
       node(
@@ -155,7 +156,7 @@ function buildSkillsTree(): UITree {
   );
 }
 
-function buildEducationTree(): UITree {
+function buildEducationTree(): Spec {
   return createTree(
     node("Card", { title: "Education" }, [
       ...profileData.education.flatMap((entry, index) => {
@@ -179,7 +180,7 @@ function buildEducationTree(): UITree {
   );
 }
 
-function buildContactTree(): UITree {
+function buildContactTree(): Spec {
   return createTree(
     node("Card", { title: "Contact" }, [
       node(
@@ -214,7 +215,7 @@ function buildContactTree(): UITree {
 
 export { buildContactTree };
 
-function buildAiToolsTree(): UITree {
+function buildAiToolsTree(): Spec {
   return createTree(
     node("Card", { title: "AI-assisted workflow" }, [
       node("Text", {

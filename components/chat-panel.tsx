@@ -93,7 +93,7 @@ const ChatMessageItem = memo(({ message, index, tree }: { message: any, index: n
             />
           ) : (
             <p className="jr-text jr-text-muted">
-              {message.content?.trim()
+              {message.content?.trim() && !message.content.trim().startsWith('{')
                 ? message.content
                 : "Thinking..."}
             </p>
@@ -264,22 +264,33 @@ export default function ChatPanel() {
   );
 
   const compilerRef = useRef<ReturnType<typeof createSpecStreamCompiler> | null>(null);
+  const lastProcessedLengthRef = useRef(0);
+  const lastProcessedIdRef = useRef<string | null>(null);
 
   // Hook into AI SDK's stream rendering to parse JSON incrementally
   const lastMessageContent = lastMessage?.role === 'assistant' ? lastMessage.content : '';
   
   useEffect(() => {
-    if (isLoading && lastMessage?.role === 'assistant' && compilerRef.current) {
-      try {
-        const { result } = compilerRef.current.push(lastMessageContent);
-        if (result) {
-          setTreeById(prev => ({ ...prev, [lastMessage.id]: result as any }));
+    if (lastMessage?.role === 'assistant' && compilerRef.current) {
+      if (lastProcessedIdRef.current !== lastMessage.id) {
+        lastProcessedLengthRef.current = 0;
+        lastProcessedIdRef.current = lastMessage.id;
+      }
+      
+      const newContent = lastMessageContent.slice(lastProcessedLengthRef.current);
+      if (newContent) {
+        try {
+          const { result } = compilerRef.current.push(newContent);
+          lastProcessedLengthRef.current = lastMessageContent.length;
+          if (result) {
+            setTreeById(prev => ({ ...prev, [lastMessage.id]: result as any }));
+          }
+        } catch (e) {
+          // Ignore JSON parse errors during streaming
         }
-      } catch (e) {
-        // Ignore JSON parse errors during streaming
       }
     }
-  }, [lastMessageContent, isLoading, lastMessage?.role, lastMessage?.id]);
+  }, [lastMessageContent, lastMessage?.role, lastMessage?.id]);
 
   useEffect(() => {
     if (!isLoading && lastMessage?.role === 'assistant') {

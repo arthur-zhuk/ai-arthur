@@ -55,6 +55,8 @@ export async function POST(req: Request) {
     return result.toTextStreamResponse();
   } catch (error) {
     console.error("Generate error", error);
-    return NextResponse.json({ tree: buildSummaryTree() });
+    return new NextResponse(JSON.stringify(buildSummaryTree()), {
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
   }
 }

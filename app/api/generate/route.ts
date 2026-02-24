@@ -33,6 +33,7 @@ Available components: ${COMPONENTS}
 - Tag: props { text }
 - Divider: props { label? }
 - Link: props { label, href }
+- Resume: props { title?, href } (use href "/arthur-zhuk-resume.pdf" when user asks for resume/CV)
 
 Output ONLY valid JSON. No markdown, no code fences, no explanatory text.`;
 

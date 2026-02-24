@@ -88,6 +88,137 @@ type AssistantMessageLike = {
   annotations?: unknown[];
 };
 
+type FlatElementLike = {
+  key?: string;
+  type?: string;
+  props?: Record<string, unknown>;
+  children?: unknown[];
+  parentKey?: string | null;
+};
+
+type FlatSpecLike = {
+  root?: string;
+  elements?: Record<string, FlatElementLike>;
+};
+
+function isFlatElementLike(value: unknown): value is FlatElementLike {
+  return !!value && typeof value === "object" && typeof (value as FlatElementLike).type === "string";
+}
+
+function normalizeFlatSpec(input: FlatSpecLike) {
+  if (!input || typeof input !== "object" || !input.elements || typeof input.elements !== "object") {
+    return undefined;
+  }
+
+  const elements: Record<string, FlatElementLike> = {};
+  let autoKeyCounter = 0;
+
+  const ensureKey = (base: string) => {
+    let key = base || `el-${autoKeyCounter++}`;
+    while (elements[key]) {
+      key = `${base || "el"}-${autoKeyCounter++}`;
+    }
+    return key;
+  };
+
+  const addElement = (key: string, raw: FlatElementLike, parentKey: string | null) => {
+    const normalizedKey = ensureKey(key || raw.key || `el-${autoKeyCounter++}`);
+    const childKeys: string[] = [];
+    const rawChildren = Array.isArray(raw.children) ? raw.children : [];
+
+    elements[normalizedKey] = {
+      key: normalizedKey,
+      type: raw.type,
+      props: raw.props ?? {},
+      children: childKeys,
+      parentKey,
+    };
+
+    for (const child of rawChildren) {
+      if (typeof child === "string") {
+        childKeys.push(child);
+        continue;
+      }
+
+      if (isFlatElementLike(child)) {
+        const nestedKey = addElement(child.key ?? `el-${autoKeyCounter++}`, child, normalizedKey);
+        childKeys.push(nestedKey);
+      }
+    }
+
+    return normalizedKey;
+  };
+
+  for (const [key, raw] of Object.entries(input.elements)) {
+    if (!isFlatElementLike(raw)) continue;
+    if (elements[key]) continue;
+    addElement(key, raw, raw.parentKey ?? null);
+  }
+
+  for (const [key, element] of Object.entries(elements)) {
+    const childKeys = Array.isArray(element.children) ? element.children : [];
+    for (const childKey of childKeys) {
+      if (typeof childKey !== "string") continue;
+      const child = elements[childKey];
+      if (child && (child.parentKey == null || child.parentKey !== key)) {
+        child.parentKey = key;
+      }
+    }
+  }
+
+  let root = typeof input.root === "string" ? input.root : "";
+
+  if (!root || !elements[root]) {
+    const missingRootChildren = root
+      ? Object.entries(elements)
+          .filter(([, element]) => element.parentKey === root)
+          .map(([key]) => key)
+      : [];
+
+    if (missingRootChildren.length > 0) {
+      const rootKey = ensureKey(root || "root");
+      elements[rootKey] = {
+        key: rootKey,
+        type: "Card",
+        props: { title: "Answer" },
+        children: missingRootChildren,
+        parentKey: null,
+      };
+      for (const childKey of missingRootChildren) {
+        elements[childKey].parentKey = rootKey;
+      }
+      root = rootKey;
+    } else {
+      const candidateRoots = Object.entries(elements)
+        .filter(([, element]) => !element.parentKey || !elements[element.parentKey])
+        .map(([key]) => key);
+
+      if (candidateRoots.length === 1) {
+        root = candidateRoots[0];
+      } else if (candidateRoots.length > 1) {
+        const rootKey = ensureKey("root");
+        elements[rootKey] = {
+          key: rootKey,
+          type: "Card",
+          props: { title: "Answer" },
+          children: candidateRoots,
+          parentKey: null,
+        };
+        for (const childKey of candidateRoots) {
+          elements[childKey].parentKey = rootKey;
+        }
+        root = rootKey;
+      }
+    }
+  }
+
+  if (!root || !elements[root]) {
+    return undefined;
+  }
+
+  return { root, elements };
+}
+
 function parseTreeSpec(raw: string, shouldLog = false) {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
@@ -109,7 +240,7 @@ function parseTreeSpec(raw: string, shouldLog = false) {
       (parsed as any).elements &&
       typeof (parsed as any).elements === "object"
     ) {
-      return parsed;
+      return normalizeFlatSpec(parsed as FlatSpecLike);
     }
 
     if (typeof (parsed as any).type === "string") {
@@ -173,8 +304,12 @@ function extractTreeFromMessage(message: AssistantMessageLike, shouldLog = false
 }
 
 const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: any, index: number, tree?: any, isLoading?: boolean }) => {
-  const isJsonLike = (s: string) => /^\s*(\{|\`\`\`)/.test(s);
-  const hasContent = !!(message.content?.trim());
+  const isJsonLike = (s: string) => /^\s*({|```)/.test(s);
+  const assistantText = message.role === "assistant"
+    ? extractAssistantText(message as AssistantMessageLike)
+    : "";
+  const hasAssistantText = !!assistantText.trim();
+  const hasUserText = typeof message.content === "string" && !!message.content.trim();
   
   return (
     <div
@@ -185,7 +320,7 @@ const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: an
     >
       {message.role === "user" ? (
         <div className="bubble bubble-user">
-          {message.content ?? ""}
+          {hasUserText ? message.content : ""}
         </div>
       ) : (
         <div className="bubble bubble-assistant">
@@ -205,11 +340,11 @@ const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: an
             </RenderErrorBoundary>
           ) : (
             <p className="jr-text jr-text-muted">
-              {hasContent && !isJsonLike(message.content)
-                ? message.content
+              {hasAssistantText && !isJsonLike(assistantText)
+                ? assistantText
                 : isLoading
                   ? "Thinking..."
-                  : hasContent
+                  : hasAssistantText
                     ? "Couldn't display response"
                     : "Thinking..."}
             </p>
@@ -263,8 +398,23 @@ export default function ChatPanel() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("question-count", String(questionCount));
+    try {
+      window.localStorage.setItem("question-count", String(questionCount));
+    } catch {
+      // Ignore storage failures in restricted browsing contexts.
+    }
   }, [questionCount]);
+
+  useEffect(() => {
+    try {
+      const persisted = Number(window.localStorage.getItem("question-count") ?? "0");
+      if (Number.isFinite(persisted) && persisted > 0) {
+        setQuestionCount(Math.min(MAX_QUESTIONS, persisted));
+      }
+    } catch {
+      // Ignore storage failures in restricted browsing contexts.
+    }
+  }, []);
 
   const { messages, setMessages, input, setInput, append, isLoading, error } = useChat({
     api: "/api/generate",
@@ -288,6 +438,7 @@ export default function ChatPanel() {
   );
   const lastMessage = messages[messages.length - 1];
   const isLocked = questionCount >= MAX_QUESTIONS;
+  const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
 
   const sendPrompt = useCallback(
     (promptText: string) => {
@@ -324,6 +475,20 @@ export default function ChatPanel() {
     sendPrompt(input);
     setInput("");
   }, [input, sendPrompt, setInput]);
+
+  const handleResetChat = useCallback(() => {
+    setMessages([]);
+    setTreeById({});
+    setFollowUps([]);
+    setQuestionCount(0);
+    setInput("");
+    lastUserQuestionRef.current = "";
+    try {
+      window.localStorage.setItem("question-count", "0");
+    } catch {
+      // Ignore storage failures in restricted browsing contexts.
+    }
+  }, [setMessages, setInput]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -421,6 +586,14 @@ export default function ChatPanel() {
                 </p>
               </div>
               <div className="chat-header-audio">
+                <button
+                  className="chip chip-subtle"
+                  type="button"
+                  onClick={handleResetChat}
+                  disabled={messages.length === 0 && questionCount === 0}
+                >
+                  Clear chat
+                </button>
                 {audioState === "playing" ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", animation: "fadeSlide 0.3s ease both" }}>
                     <div className="audio-bars">
@@ -490,6 +663,10 @@ export default function ChatPanel() {
         </div>
 
         <footer className="chat-input">
+          <div className="chat-input-meta">
+            <p className="chat-counter">{remainingQuestions} questions left</p>
+            <p className="chat-hint">Press Enter to send, Shift+Enter for new line</p>
+          </div>
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -497,11 +674,13 @@ export default function ChatPanel() {
             placeholder="Ask about experience, skills, or projects..."
             rows={2}
             disabled={isLoading || isLocked}
+            aria-label="Ask a question about Arthur"
           />
           <button
             type="button"
             onClick={handleSend}
             disabled={!input.trim() || isLoading || isLocked}
+            aria-label="Send message"
           >
             {isLoading ? "Sending..." : "Send"}
           </button>

@@ -95,6 +95,7 @@ function Divider({ props }: any) {
 function Resume({ props }: any) {
   const title = props.title as string | undefined | null;
   const href = props.href as string;
+  const isPdf = /\.pdf(?:$|\?)/i.test(href ?? "");
 
   return (
     <div className="jr-resume">
@@ -107,12 +108,18 @@ function Resume({ props }: any) {
           Open PDF
         </a>
       </div>
-      <iframe
-        className="jr-resume-frame"
-        src={href}
-        title={title ?? "Arthur Zhuk Resume"}
-        loading="lazy"
-      />
+      {isPdf ? (
+        <iframe
+          className="jr-resume-frame"
+          src={href}
+          title={title ?? "Arthur Zhuk Resume"}
+          loading="lazy"
+        />
+      ) : (
+        <p className="jr-text jr-text-muted">
+          Preview isn&apos;t available for this file type. Use &quot;Open PDF&quot; to view it.
+        </p>
+      )}
     </div>
   );
 }

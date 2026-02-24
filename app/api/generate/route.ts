@@ -56,11 +56,43 @@ type OpenAIEvent = {
   message?: string;
 };
 
+type IncomingMessagePart = {
+  type?: string;
+  text?: string;
+};
+
+type IncomingMessage = {
+  role?: string;
+  content?: string;
+  parts?: IncomingMessagePart[];
+};
+
 const encoder = new TextEncoder();
 let sharedSocket: WebSocket | null = null;
 let socketConnectPromise: Promise<WebSocket> | null = null;
 const pendingWithoutId: PendingRequest[] = [];
 const pendingByResponseId = new Map<string, PendingRequest>();
+
+function extractMessageText(message: IncomingMessage) {
+  if (typeof message.content === "string" && message.content.trim()) {
+    return message.content.trim();
+  }
+
+  if (Array.isArray(message.parts)) {
+    const textFromParts = message.parts
+      .filter((part) => part?.type === "text" && typeof part.text === "string")
+      .map((part) => part.text?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+
+    if (textFromParts) {
+      return textFromParts;
+    }
+  }
+
+  return "";
+}
 
 function clearPendingRequest(pending: PendingRequest) {
   pending.closed = true;
@@ -214,18 +246,37 @@ export async function POST(req: Request) {
     const body = await req.json();
     const prompt =
       typeof body?.prompt === "string" ? body.prompt.trim() : "";
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const messages = Array.isArray(body?.messages)
+      ? (body.messages as IncomingMessage[])
+      : [];
     const lastUserMessage = [...messages]
       .reverse()
-      .find((message: { role?: string; content?: string }) => message.role === "user");
-    const resolvedPrompt = prompt || (lastUserMessage?.content ?? "").trim();
+      .find((message) => message.role === "user");
+    const lastUserMessageText = lastUserMessage
+      ? extractMessageText(lastUserMessage)
+      : "";
+    const resolvedPrompt = prompt || lastUserMessageText;
+
+    console.debug("generate: resolved prompt", {
+      hasPromptField: Boolean(prompt),
+      messageCount: messages.length,
+      hasLastUserMessage: Boolean(lastUserMessage),
+      resolvedPromptLength: resolvedPrompt.length,
+    });
 
     if (!resolvedPrompt) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
     const socket = await getSharedSocket(process.env.OPENAI_API_KEY);
-    const input = buildPrompt(resolvedPrompt);
+    const inputText = buildPrompt(resolvedPrompt);
+    const input = [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: inputText }],
+      },
+    ];
 
     let currentPending: PendingRequest | null = null;
     const stream = new ReadableStream<Uint8Array>({
@@ -235,6 +286,11 @@ export async function POST(req: Request) {
         pendingWithoutId.push(pending);
 
         try {
+          console.debug("generate: sending websocket response.create", {
+            model: "gpt-4o-mini",
+            inputMessageCount: input.length,
+            inputTextLength: inputText.length,
+          });
           socket.send(
             JSON.stringify({
               type: "response.create",

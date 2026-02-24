@@ -125,6 +125,7 @@ export const profileData = {
     "MongoDB",
     "GraphQL",
     "E2E Testing",
+    "Playwright",
     "Cypress",
     "Solidity",
     "Ruby on Rails",

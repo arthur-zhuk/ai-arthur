@@ -13,6 +13,7 @@ import { audioManager, type AudioState } from "@/lib/audio-manager";
 const quickPrompts = [
   "What are your most recent roles?",
   "What tech stack do you focus on?",
+  "What are your backend strengths?",
   "How can I get in contact with Arthur?",
   "Show me your resume",
   "What do you do outside of work?",
@@ -23,17 +24,20 @@ const followUpBank = {
   general: [
     "What industries have you worked in?",
     "What are your strongest frontend strengths?",
+    "What are your strongest backend strengths?",
     "How can I get in contact with Arthur?",
   ],
   experience: [
     "What was your impact at Travel Syndicate Technology?",
     "What did you do at Insight Rx?",
     "What kind of teams have you led?",
+    "What backend work have you done?",
   ],
   skills: [
     "What is your preferred tech stack?",
     "What backend experience do you have?",
     "Which tools do you use for testing?",
+    "What databases are you proficient in?",
   ],
   contact: [
     "Where can I find your GitHub?",
@@ -42,7 +46,7 @@ const followUpBank = {
   ],
 };
 
-const MAX_QUESTIONS = 10;
+const MAX_QUESTIONS = 30;
 
 class RenderErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }> {
   state = { hasError: false };
@@ -507,6 +511,7 @@ export default function ChatPanel() {
           key={prompt}
           className="chip"
           type="button"
+          disabled={isLoading}
           onClick={() => {
             sendPrompt(prompt);
             setInput("");
@@ -520,7 +525,7 @@ export default function ChatPanel() {
           {prompt}
         </button>
       )),
-    [sendPrompt, setInput],
+    [sendPrompt, setInput, isLoading],
   );
 
   const followUpButtons = useMemo(
@@ -530,6 +535,7 @@ export default function ChatPanel() {
           key={prompt}
           className="chip"
           type="button"
+          disabled={isLoading}
           onClick={() => {
             sendPrompt(prompt);
             setInput("");
@@ -543,7 +549,7 @@ export default function ChatPanel() {
           {prompt}
         </button>
       )),
-    [followUps, sendPrompt, setInput],
+    [followUps, sendPrompt, setInput, isLoading],
   );
 
   useEffect(() => {

@@ -76,6 +76,102 @@ function getFollowUps(question: string) {
   return followUpBank.general;
 }
 
+type MessageTextPart =
+  | { type?: string; text?: string }
+  | { type?: string; text?: { value?: string } };
+
+type AssistantMessageLike = {
+  id: string;
+  role: string;
+  content?: string | null;
+  parts?: MessageTextPart[];
+  annotations?: unknown[];
+};
+
+function parseTreeSpec(raw: string, shouldLog = false) {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  let jsonStr = trimmed;
+  const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) {
+    jsonStr = codeBlock[1].trim();
+  } else if (!trimmed.startsWith("{")) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (!parsed || typeof parsed !== "object") return undefined;
+
+    if (
+      typeof (parsed as any).root === "string" &&
+      (parsed as any).elements &&
+      typeof (parsed as any).elements === "object"
+    ) {
+      return parsed;
+    }
+
+    if (typeof (parsed as any).type === "string") {
+      return nestedToFlat(parsed);
+    }
+
+    return undefined;
+  } catch (error) {
+    if (shouldLog) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn("[Chat] JSON parse failed:", message, "Preview:", jsonStr.slice(0, 200));
+    }
+    return undefined;
+  }
+}
+
+function extractAssistantText(message: AssistantMessageLike) {
+  if (typeof message.content === "string" && message.content.trim()) {
+    return message.content;
+  }
+
+  const partsText = (message.parts ?? [])
+    .filter((part) => part?.type === "text")
+    .map((part) => {
+      if (typeof part.text === "string") return part.text;
+      if (part.text && typeof part.text === "object" && typeof part.text.value === "string") {
+        return part.text.value;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("");
+
+  return partsText;
+}
+
+function extractTreeFromMessage(message: AssistantMessageLike, shouldLog = false) {
+  const annotationTree = (message.annotations ?? []).find((annotation) => {
+    if (!annotation || typeof annotation !== "object") return false;
+    const value = annotation as Record<string, unknown>;
+    return (
+      (typeof value.root === "string" && !!value.elements && typeof value.elements === "object") ||
+      typeof value.type === "string"
+    );
+  });
+
+  if (annotationTree) {
+    if (
+      typeof (annotationTree as any).root === "string" &&
+      (annotationTree as any).elements &&
+      typeof (annotationTree as any).elements === "object"
+    ) {
+      return annotationTree;
+    }
+    if (typeof (annotationTree as any).type === "string") {
+      return nestedToFlat(annotationTree as Record<string, unknown>);
+    }
+  }
+
+  return parseTreeSpec(extractAssistantText(message), shouldLog);
+}
+
 const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: any, index: number, tree?: any, isLoading?: boolean }) => {
   const isJsonLike = (s: string) => /^\s*(\{|\`\`\`)/.test(s);
   const hasContent = !!(message.content?.trim());
@@ -173,6 +269,12 @@ export default function ChatPanel() {
   const { messages, setMessages, input, setInput, append, isLoading, error } = useChat({
     api: "/api/generate",
     streamProtocol: "text",
+    onFinish: (message) => {
+      if (message.role !== "assistant") return;
+      const tree = extractTreeFromMessage(message as AssistantMessageLike, true);
+      if (!tree) return;
+      setTreeById((prev) => ({ ...prev, [message.id]: tree }));
+    },
     onError: (err) => console.error("[Chat] API error:", err),
   });
 
@@ -279,38 +381,21 @@ export default function ChatPanel() {
     [followUps, sendPrompt, setInput],
   );
 
-  const lastMessageContent = lastMessage?.role === 'assistant' ? lastMessage.content : '';
-  
   useEffect(() => {
-    if (lastMessage?.role !== 'assistant' || !lastMessageContent.trim()) return;
-    const trimmed = lastMessageContent.trim();
-    let jsonStr = trimmed;
-    const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlock) jsonStr = codeBlock[1].trim();
-    else if (!trimmed.startsWith('{') && !trimmed.startsWith('```')) return;
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (!parsed || typeof parsed !== 'object') {
-        if (!isLoading) console.warn("[Chat] Parsed JSON is not an object:", typeof parsed);
-        return;
+    setTreeById((prev) => {
+      let next = prev;
+
+      for (const message of messages) {
+        if (message.role !== "assistant" || prev[message.id]) continue;
+        const tree = extractTreeFromMessage(message as AssistantMessageLike, !isLoading);
+        if (!tree) continue;
+        if (next === prev) next = { ...prev };
+        next[message.id] = tree;
       }
-      let spec: any;
-      if (typeof parsed.root === 'string' && parsed.elements && typeof parsed.elements === 'object') {
-        spec = parsed;
-      } else if (parsed.type && typeof parsed.type === 'string') {
-        spec = nestedToFlat(parsed);
-      } else {
-        if (!isLoading) console.warn("[Chat] Unknown spec format. Has root:", 'root' in parsed, "has type:", 'type' in parsed, "keys:", Object.keys(parsed).slice(0, 5));
-        return;
-      }
-      setTreeById(prev => ({ ...prev, [lastMessage.id]: spec }));
-    } catch (e) {
-      if (!isLoading) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn("[Chat] JSON parse failed:", msg, "Content preview:", jsonStr.slice(0, 200));
-      }
-    }
-  }, [lastMessageContent, lastMessage?.role, lastMessage?.id, isLoading]);
+
+      return next;
+    });
+  }, [messages, isLoading]);
 
   useEffect(() => {
     if (!isLoading && lastMessage?.role === 'assistant') {

@@ -359,6 +359,16 @@ const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: an
   );
 });
 
+function ThinkingSkeleton() {
+  return (
+    <div className="thinking-skeleton" aria-label="Arthur is composing a response">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
 export default function ChatPanel() {
   const [treeById, setTreeById] = useState<Record<string, any>>({});
   const [followUps, setFollowUps] = useState<string[]>([]);
@@ -443,6 +453,7 @@ export default function ChatPanel() {
   const lastMessage = messages[messages.length - 1];
   const isLocked = questionCount >= MAX_QUESTIONS;
   const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
+  const askedQuestions = Math.min(MAX_QUESTIONS, questionCount);
 
   const sendPrompt = useCallback(
     (promptText: string) => {
@@ -591,6 +602,16 @@ export default function ChatPanel() {
                   or the teams I've worked with.
                 </p>
               </div>
+              <div className="status-rail" aria-label="Profile chat status">
+                <div className="status-pill">
+                  <span className="status-value">{askedQuestions}</span>
+                  <span className="status-label">Asked</span>
+                </div>
+                <div className="status-pill status-pill-accent">
+                  <span className="status-value">{remainingQuestions}</span>
+                  <span className="status-label">Left</span>
+                </div>
+              </div>
               <div className="chat-header-audio">
                 <button
                   className="chip chip-subtle"
@@ -601,7 +622,7 @@ export default function ChatPanel() {
                   Clear chat
                 </button>
                 {audioState === "playing" ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", animation: "fadeSlide 0.3s ease both" }}>
+                  <div className="audio-now-playing">
                     <div className="audio-bars">
                       <span className="bar"></span>
                       <span className="bar"></span>
@@ -614,8 +635,8 @@ export default function ChatPanel() {
                 ) : null}
                 <button 
                   className="chip" 
+                  type="button"
                   onClick={() => audioManager.toggle()}
-                  style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", margin: 0 }}
                 >
                   {audioState === "playing" ? (
                     <>
@@ -647,8 +668,14 @@ export default function ChatPanel() {
             {isLoading && lastMessage?.role === "user" ? (
               <div className="chat-message chat-message-assistant">
                 <div className="bubble bubble-assistant">
-                  <p className="jr-text jr-text-muted">Thinking...</p>
+                  <ThinkingSkeleton />
                 </div>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="chat-error" role="alert">
+                <strong>Response failed</strong>
+                <span>{error.message || "Try again in a moment."}</span>
               </div>
             ) : null}
             {followUps.length > 0 ? (

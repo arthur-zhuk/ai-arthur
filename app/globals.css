@@ -123,12 +123,19 @@ body::before {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 24% 28%, rgba(215, 151, 99, 0.16), transparent 24%),
-    radial-gradient(circle at 78% 18%, rgba(116, 139, 116, 0.12), transparent 28%);
+    radial-gradient(circle at 28% 35%, rgba(215, 151, 99, 0.22), transparent 26%),
+    radial-gradient(circle at 78% 20%, rgba(116, 139, 116, 0.16), transparent 30%),
+    radial-gradient(circle at 50% 74%, rgba(247, 241, 231, 0.08), transparent 28%);
 }
 
 .chat-bg .metaballs-overlay {
-  opacity: 0.25;
+  position: absolute;
+  inset: 0;
+  opacity: 0.28;
+  background:
+    linear-gradient(110deg, transparent 0%, rgba(247, 241, 231, 0.08) 42%, transparent 68%),
+    radial-gradient(circle at 34% 38%, rgba(247, 241, 231, 0.08), transparent 22%);
+  mix-blend-mode: screen;
 }
 
 .chat-bg-shade {

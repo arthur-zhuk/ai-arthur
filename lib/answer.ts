@@ -16,11 +16,11 @@ export function buildIntroTree(): Spec {
     node("Card", { title: "Arthur Zhuk", subtitle: profileData.title }, [
       node("Text", {
         content:
-          "I'm a Senior Fullstack Engineer with 10+ years across enterprise, healthcare, DeFi, and accessibility tech.",
+          "I'm a Senior Software Engineer with 10+ years across defense technology, enterprise, healthcare, DeFi, and accessibility tech.",
       }),
       node("Text", {
         content:
-          "Currently I lead architecture for travel booking surfaces at Travel Syndicate Technology while staying hands-on as an individual contributor, with a deep React + TypeScript focus.",
+          "I'm currently at Anduril, building mission-critical software while bringing senior depth across backend systems, APIs, data modeling, reliability, React, and TypeScript.",
       }),
       node("Text", {
         content:

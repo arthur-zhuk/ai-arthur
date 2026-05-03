@@ -1,26 +1,41 @@
 export const profileData = {
   name: "Arthur Zhuk",
-  title: "Senior Fullstack Engineer",
+  title: "Senior Software Engineer",
   tagline:
-    "Building high-performance interfaces and scalable backend architectures for complex, data-heavy products.",
+    "Building high-performance interfaces and production backend systems for complex, data-heavy products.",
   about: [
-    "I am a Senior Fullstack Engineer with over a decade of experience building web applications across enterprise, healthcare, DeFi, and accessibility tech. I work across the entire stack, from designing scalable APIs and database architectures to building high-performance user interfaces that teams can maintain and extend.",
-    "Currently at Travel Syndicate Technology, I own the architecture for Hotel, Itinerary, and Manual Booking surfaces, setting standards for performance, state management, and release quality across multiple engineering teams.",
+    "I am a Senior Software Engineer with over a decade of experience building production systems across defense technology, enterprise SaaS, healthcare, DeFi, and accessibility tech. I work across the stack, with senior-level depth in backend architecture, API design, database modernization, reliability, and high-performance user interfaces.",
+    "I am currently a Senior Software Engineer at Anduril, working on mission-critical software in a high-accountability engineering environment.",
+    "Most recently before Anduril, I led architecture for Hotel, Itinerary, and Manual Booking surfaces at Travel Syndicate Technology, setting standards for performance, state management, and release quality across multiple engineering teams.",
     "My career spans fullstack development at every level: executing major backend upgrades like a MongoDB migration across four major versions at Insight Rx, building Rails APIs and React frontends at Procore, shipping smart contract integrations at Saddle Finance, and starting in DevOps at Microsoft and Boeing.",
     "I leverage AI-accelerated development daily, using tools like Cursor, Claude Code, and Wispr Flow to prototype features, refactor code, and improve test coverage faster."
   ],
   highlights: [
+    "Senior Software Engineer at Anduril",
+    "Backend architecture, APIs, data modeling, and reliability",
     "React + TypeScript architecture leader",
     "Performance budgets and release quality ownership",
-    "Frontend + backend modernization",
     "AI-assisted engineering workflows"
   ],
   experience: [
     {
+      company: "Anduril",
+      title: "Senior Software Engineer",
+      location: "United States",
+      dateRange: "May 2026 - Present",
+      description:
+        "Building mission-critical software as a Senior Software Engineer in a high-accountability defense technology environment.",
+      achievements: [
+        "Contributing to production software where reliability, system correctness, and operational clarity matter",
+        "Applying senior fullstack and backend engineering experience across API design, data flow, and maintainable system architecture"
+      ],
+      skills: ["Backend Systems", "System Design", "TypeScript", "Reliability"]
+    },
+    {
       company: "Travel Syndicate Technology",
       title: "Senior Software Engineer",
       location: "Remote",
-      dateRange: "Feb 2025 - Present",
+      dateRange: "Feb 2025 - Apr 2026",
       description:
         "Own architecture for Hotel, Itinerary, and Manual Booking surfaces; set standards for performance budgets, state management, and release quality across 10 engineers and 6 repos.",
       achievements: [
@@ -121,6 +136,10 @@ export const profileData = {
     "Next.js",
     "Node.js",
     "Express",
+    "API Design",
+    "Backend Architecture",
+    "Data Modeling",
+    "System Reliability",
     "PostHog",
     "MongoDB",
     "GraphQL",

@@ -28,6 +28,7 @@ const followUpBank = {
     "How can I get in contact with Arthur?",
   ],
   experience: [
+    "What are you doing at Anduril?",
     "What was your impact at Travel Syndicate Technology?",
     "What did you do at Insight Rx?",
     "What kind of teams have you led?",
@@ -342,15 +343,15 @@ const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: an
                 registry={componentRegistry}
               />
             </RenderErrorBoundary>
+          ) : isLoading && (!hasAssistantText || isJsonLike(assistantText)) ? (
+            <ThinkingSkeleton />
           ) : (
             <p className="jr-text jr-text-muted">
               {hasAssistantText && !isJsonLike(assistantText)
                 ? assistantText
-                : isLoading
-                  ? "Thinking..."
-                  : hasAssistantText
-                    ? "Couldn't display response"
-                    : "Thinking..."}
+                : hasAssistantText
+                  ? "Couldn't display response"
+                  : "Thinking..."}
             </p>
           )}
         </div>
@@ -373,6 +374,8 @@ export default function ChatPanel() {
   const [treeById, setTreeById] = useState<Record<string, any>>({});
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [questionCount, setQuestionCount] = useState(0);
+  const [input, setInput] = useState("");
+  const chatThreadRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const lastUserQuestionRef = useRef("");
   const introMessage = useMemo(
@@ -430,7 +433,7 @@ export default function ChatPanel() {
     }
   }, []);
 
-  const { messages, setMessages, input, setInput, append, isLoading, error } = useChat({
+  const { messages, setMessages, append, isLoading, error } = useChat({
     api: "/api/generate",
     streamProtocol: "text",
     onFinish: (message) => {
@@ -454,6 +457,17 @@ export default function ChatPanel() {
   const isLocked = questionCount >= MAX_QUESTIONS;
   const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
   const askedQuestions = Math.min(MAX_QUESTIONS, questionCount);
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const thread = chatThreadRef.current;
+    if (thread) {
+      thread.scrollTo({
+        top: thread.scrollHeight,
+        behavior,
+      });
+      return;
+    }
+    endRef.current?.scrollIntoView({ behavior, block: "end" });
+  }, []);
 
   const sendPrompt = useCallback(
     (promptText: string) => {
@@ -478,12 +492,14 @@ export default function ChatPanel() {
           ...prev,
           [assistantId]: buildContactTree() as any,
         }));
+        requestAnimationFrame(() => scrollToBottom("smooth"));
         return;
       }
 
       append({ role: "user", content: trimmed, id: userId });
+      requestAnimationFrame(() => scrollToBottom("smooth"));
     },
-    [append, questionCount, setMessages],
+    [append, questionCount, scrollToBottom, setMessages],
   );
 
   const handleSend = useCallback(() => {
@@ -527,16 +543,14 @@ export default function ChatPanel() {
             sendPrompt(prompt);
             setInput("");
             if (window.matchMedia("(max-width: 768px)").matches) {
-              requestAnimationFrame(() => {
-                endRef.current?.scrollIntoView({ behavior: "smooth" });
-              });
+              requestAnimationFrame(() => scrollToBottom("smooth"));
             }
           }}
         >
           {prompt}
         </button>
       )),
-    [sendPrompt, setInput, isLoading],
+    [sendPrompt, setInput, isLoading, scrollToBottom],
   );
 
   const followUpButtons = useMemo(
@@ -551,16 +565,14 @@ export default function ChatPanel() {
             sendPrompt(prompt);
             setInput("");
             if (window.matchMedia("(max-width: 768px)").matches) {
-              requestAnimationFrame(() => {
-                endRef.current?.scrollIntoView({ behavior: "smooth" });
-              });
+              requestAnimationFrame(() => scrollToBottom("smooth"));
             }
           }}
         >
           {prompt}
         </button>
       )),
-    [followUps, sendPrompt, setInput, isLoading],
+    [followUps, sendPrompt, setInput, isLoading, scrollToBottom],
   );
 
   useEffect(() => {
@@ -583,15 +595,28 @@ export default function ChatPanel() {
     if (!isLoading && lastMessage?.role === 'assistant') {
        const question = lastUserQuestionRef.current;
        setFollowUps(getFollowUps(question));
-       endRef.current?.scrollIntoView({ behavior: "smooth" });
+       requestAnimationFrame(() => scrollToBottom("smooth"));
+       window.setTimeout(() => scrollToBottom("smooth"), 80);
     }
-  }, [isLoading, lastMessage]);
+  }, [isLoading, lastMessage, scrollToBottom]);
+
+  useEffect(() => {
+    if (isLoading) {
+      requestAnimationFrame(() => scrollToBottom("auto"));
+    }
+  }, [messages, isLoading, scrollToBottom]);
+
+  useEffect(() => {
+    if (followUps.length > 0 || isLocked) {
+      requestAnimationFrame(() => scrollToBottom("smooth"));
+    }
+  }, [followUps.length, isLocked, scrollToBottom]);
 
   return (
     <section className="chat-panel">
       <ChatBackground />
       <div className="chat-content">
-        <div className="chat-thread">
+        <div className="chat-thread" ref={chatThreadRef}>
           <header className="chat-header">
             <div className="chat-header-top">
               <div className="chat-header-text">

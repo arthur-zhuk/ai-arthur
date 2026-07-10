@@ -11,13 +11,26 @@ import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
 
 const quickPrompts = [
-  "What are your most recent roles?",
-  "What tech stack do you focus on?",
-  "What are your backend strengths?",
-  "How can I get in contact with Arthur?",
-  "Show me your resume",
-  "What do you do outside of work?",
-  "How do you use AI in your workflow?",
+  {
+    label: "Current work",
+    detail: "Anduril and recent roles",
+    prompt: "Tell me about your current work at Anduril and your most recent roles.",
+  },
+  {
+    label: "Engineering depth",
+    detail: "Backend, systems, and frontend",
+    prompt: "What are your strongest backend, systems, and frontend skills?",
+  },
+  {
+    label: "Career highlights",
+    detail: "Impact across 10+ years",
+    prompt: "Walk me through the biggest highlights and impact from your career.",
+  },
+  {
+    label: "Beyond work",
+    detail: "Interests, tools, and contact",
+    prompt: "What should I know about you beyond work, including your interests and how to get in touch?",
+  },
 ];
 
 const followUpBank = {
@@ -30,14 +43,11 @@ const followUpBank = {
   experience: [
     "What are you doing at Anduril?",
     "What was your impact at Travel Syndicate Technology?",
-    "What did you do at Insight Rx?",
     "What kind of teams have you led?",
-    "What backend work have you done?",
   ],
   skills: [
     "What is your preferred tech stack?",
     "What backend experience do you have?",
-    "Which tools do you use for testing?",
     "What databases are you proficient in?",
   ],
   contact: [
@@ -390,31 +400,6 @@ export default function ChatPanel() {
   }, []);
 
   useEffect(() => {
-    let interacted = false;
-
-    // Browsers block autoplay without user interaction.
-    // We wait for the first click, touch, or keypress to start the audio.
-    const handleInteraction = () => {
-      if (interacted) return;
-      interacted = true;
-      
-      // We don't call toggle here, just play, so it doesn't conflict with the Play button
-      audioManager.play();
-    };
-
-    const events = ['click', 'keydown', 'pointerdown'];
-    events.forEach(event => {
-      document.addEventListener(event, handleInteraction, { once: true });
-    });
-
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, handleInteraction);
-      });
-    };
-  }, []);
-
-  useEffect(() => {
     try {
       window.localStorage.setItem("question-count", String(questionCount));
     } catch {
@@ -456,7 +441,6 @@ export default function ChatPanel() {
   const lastMessage = messages[messages.length - 1];
   const isLocked = questionCount >= MAX_QUESTIONS;
   const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
-  const askedQuestions = Math.min(MAX_QUESTIONS, questionCount);
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const thread = chatThreadRef.current;
     if (thread) {
@@ -533,21 +517,28 @@ export default function ChatPanel() {
 
   const promptButtons = useMemo(
     () =>
-      quickPrompts.map((prompt) => (
+      quickPrompts.map((item) => (
         <button
-          key={prompt}
-          className="chip"
+          key={item.label}
+          className="starter-prompt"
           type="button"
           disabled={isLoading}
           onClick={() => {
-            sendPrompt(prompt);
+            sendPrompt(item.prompt);
             setInput("");
             if (window.matchMedia("(max-width: 768px)").matches) {
               requestAnimationFrame(() => scrollToBottom("smooth"));
             }
           }}
         >
-          {prompt}
+          <span>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14" />
+            <path d="m13 6 6 6-6 6" />
+          </svg>
         </button>
       )),
     [sendPrompt, setInput, isLoading, scrollToBottom],
@@ -620,32 +611,14 @@ export default function ChatPanel() {
           <header className="chat-header">
             <div className="chat-header-top">
               <div className="chat-header-text">
-                <p className="eyebrow">Ask Arthur</p>
+                <p className="eyebrow"><span className="presence-dot" /> Senior Software Engineer at Anduril</p>
                 <h2>Arthur Zhuk</h2>
                 <p className="muted">
-                  Welcome to my profile. Ask anything about my experience, skills,
-                  or the teams I've worked with.
+                  I build mission-critical software, care deeply about good systems,
+                  and stay close to the product. Ask me what you are curious about.
                 </p>
               </div>
-              <div className="status-rail" aria-label="Profile chat status">
-                <div className="status-pill">
-                  <span className="status-value">{askedQuestions}</span>
-                  <span className="status-label">Asked</span>
-                </div>
-                <div className="status-pill status-pill-accent">
-                  <span className="status-value">{remainingQuestions}</span>
-                  <span className="status-label">Left</span>
-                </div>
-              </div>
               <div className="chat-header-audio">
-                <button
-                  className="chip chip-subtle"
-                  type="button"
-                  onClick={handleResetChat}
-                  disabled={messages.length === 0 && questionCount === 0}
-                >
-                  Clear chat
-                </button>
                 {audioState === "playing" ? (
                   <div className="audio-now-playing">
                     <div className="audio-bars">
@@ -658,26 +631,38 @@ export default function ChatPanel() {
                     </span>
                   </div>
                 ) : null}
-                <button 
-                  className="chip" 
+                <button
+                  className="icon-button"
                   type="button"
                   onClick={() => audioManager.toggle()}
+                  aria-label={audioState === "playing" ? "Pause soundtrack" : "Play soundtrack"}
+                  title={audioState === "playing" ? "Pause soundtrack" : "Play Arthur of Silver Lake"}
                 >
                   {audioState === "playing" ? (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                      <span>Pause</span>
-                    </>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                   ) : (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                      <span>Play</span>
-                    </>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
                   )}
                 </button>
+                {messages.length > 0 ? (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={handleResetChat}
+                    aria-label="Start a new conversation"
+                    title="Start over"
+                  >
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                      <path d="M3 3v5h5" />
+                    </svg>
+                  </button>
+                ) : null}
               </div>
             </div>
-            <div className="chip-row">{promptButtons}</div>
+            {messages.length === 0 ? (
+              <div className="starter-prompts">{promptButtons}</div>
+            ) : null}
           </header>
 
           <JSONUIProvider registry={componentRegistry}>
@@ -722,15 +707,17 @@ export default function ChatPanel() {
 
         <footer className="chat-input">
           <div className="chat-input-meta">
-            <p className="chat-counter">{remainingQuestions} questions left</p>
-            <p className="chat-hint">Press Enter to send, Shift+Enter for new line</p>
+            <p className="chat-hint">Ask me anything</p>
+            {remainingQuestions <= 5 ? (
+              <p className="chat-counter">{remainingQuestions} questions remaining</p>
+            ) : null}
           </div>
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about experience, skills, or projects..."
-            rows={2}
+            rows={1}
             disabled={isLoading || isLocked}
             aria-label="Ask a question about Arthur"
           />
@@ -740,7 +727,10 @@ export default function ChatPanel() {
             disabled={!input.trim() || isLoading || isLocked}
             aria-label="Send message"
           >
-            {isLoading ? "Sending..." : "Send"}
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5 12 7-7 7 7" />
+              <path d="M12 19V5" />
+            </svg>
           </button>
         </footer>
       </div>

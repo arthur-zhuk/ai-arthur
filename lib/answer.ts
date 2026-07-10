@@ -3,37 +3,18 @@ import { createTree, node } from "@/lib/tree";
 import { profileData } from "@/lib/profile-data";
 import type { Spec } from "@json-render/core";
 
-const quickTopics = [
-  "Experience",
-  "Skills",
-  "Education",
-  "Contact",
-  "AI tools",
-];
-
 export function buildIntroTree(): Spec {
   return createTree(
-    node("Card", { title: "Arthur Zhuk", subtitle: profileData.title }, [
+    node("Card", {}, [
       node("Text", {
         content:
-          "I'm a Senior Software Engineer with 10+ years across defense technology, enterprise, healthcare, DeFi, and accessibility tech.",
+          "Hey, I'm Arthur. I have spent more than a decade building software across defense technology, healthcare, enterprise products, DeFi, and accessibility.",
       }),
       node("Text", {
         content:
-          "I'm currently at Anduril, building mission-critical software while bringing senior depth across backend systems, APIs, data modeling, reliability, React, and TypeScript.",
-      }),
-      node("Text", {
-        content:
-          "Ask me anything about my experience, skills, or projects.",
+          "I am currently at Anduril. This is a conversational version of my background, so ask about the work, the technical details, or what I am like outside of it.",
         variant: "muted",
       }),
-      node(
-        "List",
-        {},
-        quickTopics.map((topic) =>
-          node("ListItem", { content: `Ask about ${topic.toLowerCase()}` }),
-        ),
-      ),
     ]),
   );
 }

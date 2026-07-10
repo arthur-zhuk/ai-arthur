@@ -126,7 +126,17 @@ function Resume({ props }: any) {
 
 function InterestGrid({ props }: any) {
   const title = props.title as string | undefined | null;
-  const items = props.items as string[];
+  const items: string[] = Array.isArray(props.items)
+    ? props.items.filter((item: unknown): item is string => typeof item === "string")
+    : [];
+
+  if (items.length === 0) {
+    return (
+      <p className="jr-text jr-text-muted">
+        Personal interests are not available in this response.
+      </p>
+    );
+  }
 
   return (
     <div className="jr-interest-grid">

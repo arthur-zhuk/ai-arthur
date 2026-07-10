@@ -196,6 +196,43 @@ function buildContactTree(): Spec {
 
 export { buildContactTree };
 
+export function buildBeyondWorkTree(): Spec {
+  return createTree(
+    node("Card", { title: "Beyond work" }, [
+      node("Text", {
+        content:
+          "Outside of engineering, Arthur likes active, competitive, and creative pursuits, with plenty of room for good food and time outdoors.",
+      }),
+      node("InterestGrid", {
+        title: "What keeps me busy",
+        items: profileData.interests,
+      }),
+      node("Divider", { label: "Get in touch" }),
+      node(
+        "List",
+        {},
+        [
+          node("ListItem", {
+            content: profileData.contact.email,
+            meta: "Email",
+            href: `mailto:${profileData.contact.email}`,
+          }),
+          node("ListItem", {
+            content: "LinkedIn",
+            meta: profileData.contact.linkedin,
+            href: profileData.contact.linkedin,
+          }),
+          node("ListItem", {
+            content: "GitHub",
+            meta: profileData.contact.github,
+            href: profileData.contact.github,
+          }),
+        ],
+      ),
+    ]),
+  );
+}
+
 function buildAiToolsTree(): Spec {
   return createTree(
     node("Card", { title: "AI-assisted workflow" }, [

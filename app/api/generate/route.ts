@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { profileData } from "@/lib/profile-data";
-import { buildSummaryTree } from "@/lib/answer";
+import { buildBeyondWorkTree, buildSummaryTree } from "@/lib/answer";
 
 const profileContext = JSON.stringify(profileData, null, 2);
 
@@ -44,6 +44,7 @@ Available components: ${COMPONENTS}
 - Divider: props { label? }
 - Link: props { label, href }
 - Resume: props { title?, href } (use href "/arthur-zhuk-resume.pdf" when user asks for resume/CV)
+- InterestGrid: props { title?, items: string[] }. Put interests in the items prop; do not use children.
 
 Output ONLY valid JSON. No markdown, no code fences, no explanatory text.`;
 
@@ -98,12 +99,27 @@ function extractMessageText(message: IncomingMessage) {
   return "";
 }
 
+function asksAboutLifeAndContact(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  const asksAboutLife = [
+    "beyond work",
+    "outside of work",
+    "interests",
+    "hobbies",
+    "personal",
+  ].some((phrase) => normalized.includes(phrase));
+  const asksAboutContact = [
+    "get in touch",
+    "contact",
+    "reach you",
+    "email",
+  ].some((phrase) => normalized.includes(phrase));
+
+  return asksAboutLife && asksAboutContact;
+}
+
 export async function POST(req: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
-    }
-
     const body = await req.json();
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const messages = Array.isArray(body?.messages)
@@ -120,6 +136,19 @@ export async function POST(req: Request) {
 
     if (!resolvedPrompt) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+    }
+
+    if (asksAboutLifeAndContact(resolvedPrompt)) {
+      return new NextResponse(JSON.stringify(buildBeyondWorkTree()), {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+        },
+      });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
     }
 
     const result = streamText({

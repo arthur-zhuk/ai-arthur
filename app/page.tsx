@@ -1,11 +1,12 @@
-import ChatPanel from "@/components/chat-panel";
+import PersonalPage from "@/components/personal-page";
 
 export default function HomePage() {
   return (
-    <main className="page">
-      <div className="page-center">
-        <ChatPanel />
-      </div>
-    </main>
+    <PersonalPage
+      chatReady={
+        process.env.SITES_STATIC_PREVIEW !== "1" &&
+        Boolean(process.env.OPENAI_API_KEY)
+      }
+    />
   );
 }

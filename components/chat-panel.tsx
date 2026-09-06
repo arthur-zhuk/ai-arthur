@@ -380,7 +380,7 @@ function ThinkingSkeleton() {
   );
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
   const [treeById, setTreeById] = useState<Record<string, any>>({});
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [questionCount, setQuestionCount] = useState(0);
@@ -456,7 +456,7 @@ export default function ChatPanel() {
   const sendPrompt = useCallback(
     (promptText: string) => {
       const trimmed = promptText.trim();
-      if (!trimmed) return;
+      if (!trimmed || !enabled || isLoading) return;
       if (questionCount >= MAX_QUESTIONS) return;
 
       const nextCount = questionCount + 1;
@@ -483,7 +483,7 @@ export default function ChatPanel() {
       append({ role: "user", content: trimmed, id: userId });
       requestAnimationFrame(() => scrollToBottom("smooth"));
     },
-    [append, questionCount, scrollToBottom, setMessages],
+    [append, enabled, isLoading, questionCount, scrollToBottom, setMessages],
   );
 
   const handleSend = useCallback(() => {
@@ -522,7 +522,7 @@ export default function ChatPanel() {
           key={item.label}
           className="starter-prompt"
           type="button"
-          disabled={isLoading}
+          disabled={isLoading || !enabled}
           onClick={() => {
             sendPrompt(item.prompt);
             setInput("");
@@ -541,7 +541,7 @@ export default function ChatPanel() {
           </svg>
         </button>
       )),
-    [sendPrompt, setInput, isLoading, scrollToBottom],
+    [sendPrompt, setInput, isLoading, enabled, scrollToBottom],
   );
 
   const followUpButtons = useMemo(
@@ -551,7 +551,7 @@ export default function ChatPanel() {
           key={prompt}
           className="chip"
           type="button"
-          disabled={isLoading}
+          disabled={isLoading || !enabled}
           onClick={() => {
             sendPrompt(prompt);
             setInput("");
@@ -563,7 +563,7 @@ export default function ChatPanel() {
           {prompt}
         </button>
       )),
-    [followUps, sendPrompt, setInput, isLoading, scrollToBottom],
+    [followUps, sendPrompt, setInput, isLoading, enabled, scrollToBottom],
   );
 
   useEffect(() => {
@@ -716,15 +716,15 @@ export default function ChatPanel() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about experience, skills, or projects..."
+            placeholder={enabled ? "Ask about experience, skills, or projects..." : "AI chat is not connected in this preview"}
             rows={1}
-            disabled={isLoading || isLocked}
+            disabled={isLoading || isLocked || !enabled}
             aria-label="Ask a question about Arthur"
           />
           <button
             type="button"
             onClick={handleSend}
-            disabled={!input.trim() || isLoading || isLocked}
+            disabled={!input.trim() || isLoading || isLocked || !enabled}
             aria-label="Send message"
           >
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

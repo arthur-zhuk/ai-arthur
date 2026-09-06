@@ -8,11 +8,11 @@ export function buildIntroTree(): Spec {
     node("Card", {}, [
       node("Text", {
         content:
-          "Hey, I'm Arthur. I have spent more than a decade building software across defense technology, healthcare, enterprise products, DeFi, and accessibility.",
+          "Arthur has spent more than a decade building software across defense technology, healthcare, enterprise products, DeFi, and accessibility.",
       }),
       node("Text", {
         content:
-          "I am currently at Anduril. This is a conversational version of my background, so ask about the work, the technical details, or what I am like outside of it.",
+          "He is currently at Anduril. Ask about his work, the technical details, or what he is like outside of it.",
         variant: "muted",
       }),
     ]),

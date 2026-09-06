@@ -1090,3 +1090,61 @@ p {
     transition: none !important;
   }
 }
+
+/* Profile chat: streamed content and recovery controls. */
+.chat-panel .jr-text,
+.chat-panel .bubble-user {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-copy {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 12px;
+  padding: 6px 0;
+}
+.chat-copy:hover {
+  color: var(--text);
+}
+.chat-partial,
+.chat-disclosure {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 7px 0 0;
+}
+.chat-disclosure {
+  flex-shrink: 0;
+  text-align: center;
+}
+.chat-retry {
+  align-self: flex-start;
+  margin: 12px 0;
+}
+.chat-session-limit {
+  font-size: 14px;
+  padding: 16px 0;
+}
+.chat-session-limit a {
+  color: var(--accent);
+  margin-left: 16px;
+}
+.chat-input button {
+  font-size: 22px;
+}
+.chat-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.chat-input textarea {
+  font-size: 16px;
+  line-height: 1.45;
+  min-height: 44px;
+  max-height: 140px;
+}
+.chat-input textarea:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}

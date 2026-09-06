@@ -1,738 +1,452 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef, useEffect, memo, Component, type ReactNode } from "react";
+import {
+  Component,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { nestedToFlat } from "@json-render/core";
-import type { Message } from "ai";
-import { buildContactTree, buildIntroTree } from "@/lib/answer";
+import { buildIntroTree } from "@/lib/answer";
+import {
+  answerDataSchema,
+  answerText,
+  answerTree,
+  getAnswer,
+  getMessageText,
+  MAX_INPUT_LENGTH,
+  MAX_QUESTIONS,
+  type ProfileMessage,
+} from "@/lib/chat/schema";
+import { profileData } from "@/lib/profile-data";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
 
+const transport = new DefaultChatTransport<ProfileMessage>({
+  api: "/api/generate",
+});
+const dataPartSchemas = { answer: answerDataSchema };
+const introTree = buildIntroTree();
 const quickPrompts = [
   {
     label: "Current work",
     detail: "Anduril and recent roles",
-    prompt: "Tell me about your current work at Anduril and your most recent roles.",
+    prompt:
+      "Tell me about Arthur's current work at Anduril and his most recent roles.",
   },
   {
     label: "Engineering depth",
     detail: "Backend, systems, and frontend",
-    prompt: "What are your strongest backend, systems, and frontend skills?",
+    prompt:
+      "What are Arthur's strongest backend, systems, and frontend skills?",
   },
   {
     label: "Career highlights",
     detail: "Impact across 10+ years",
-    prompt: "Walk me through the biggest highlights and impact from your career.",
+    prompt:
+      "Walk me through the biggest highlights and impact from Arthur's career.",
   },
   {
     label: "Beyond work",
     detail: "Interests, tools, and contact",
-    prompt: "What should I know about you beyond work, including your interests and how to get in touch?",
+    prompt:
+      "What should I know about Arthur beyond work, including his interests and how to get in touch?",
   },
 ];
-
-const followUpBank = {
-  general: [
-    "What industries have you worked in?",
-    "What are your strongest frontend strengths?",
-    "What are your strongest backend strengths?",
-    "How can I get in contact with Arthur?",
-  ],
-  experience: [
-    "What are you doing at Anduril?",
-    "What was your impact at Travel Syndicate Technology?",
-    "What kind of teams have you led?",
-  ],
-  skills: [
-    "What is your preferred tech stack?",
-    "What backend experience do you have?",
-    "What databases are you proficient in?",
-  ],
-  contact: [
-    "Where can I find your GitHub?",
-    "Are you open to new opportunities?",
-    "What is the best way to reach you?",
-  ],
-};
-
-const MAX_QUESTIONS = 30;
-
-class RenderErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }> {
+class RenderErrorBoundary extends Component<{ children: ReactNode }> {
   state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error: Error) { console.error("[Chat] Renderer error:", error.message, error); }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
   render() {
-    if (this.state.hasError) return this.props.fallback ?? <p className="jr-text jr-text-muted">Failed to render response</p>;
-    return this.props.children;
-  }
-}
-
-function getFollowUps(question: string) {
-  const normalized = question.toLowerCase();
-  if (normalized.includes("contact") || normalized.includes("email")) {
-    return followUpBank.contact;
-  }
-  if (
-    normalized.includes("experience") ||
-    normalized.includes("roles") ||
-    normalized.includes("company")
-  ) {
-    return followUpBank.experience;
-  }
-  if (
-    normalized.includes("stack") ||
-    normalized.includes("skills") ||
-    normalized.includes("tech")
-  ) {
-    return followUpBank.skills;
-  }
-  return followUpBank.general;
-}
-
-type MessageTextPart =
-  | { type?: string; text?: string }
-  | { type?: string; text?: { value?: string } };
-
-type AssistantMessageLike = {
-  id: string;
-  role: string;
-  content?: string | null;
-  parts?: MessageTextPart[];
-  annotations?: unknown[];
-};
-
-type FlatElementLike = {
-  key?: string;
-  type?: string;
-  props?: Record<string, unknown>;
-  children?: unknown[];
-  parentKey?: string | null;
-};
-
-type FlatSpecLike = {
-  root?: string;
-  elements?: Record<string, FlatElementLike>;
-};
-
-function isFlatElementLike(value: unknown): value is FlatElementLike {
-  return !!value && typeof value === "object" && typeof (value as FlatElementLike).type === "string";
-}
-
-function normalizeFlatSpec(input: FlatSpecLike) {
-  if (!input || typeof input !== "object" || !input.elements || typeof input.elements !== "object") {
-    return undefined;
-  }
-
-  const elements: Record<string, FlatElementLike> = {};
-  let autoKeyCounter = 0;
-
-  const ensureKey = (base: string) => {
-    let key = base || `el-${autoKeyCounter++}`;
-    while (elements[key]) {
-      key = `${base || "el"}-${autoKeyCounter++}`;
-    }
-    return key;
-  };
-
-  const addElement = (key: string, raw: FlatElementLike, parentKey: string | null) => {
-    const normalizedKey = ensureKey(key || raw.key || `el-${autoKeyCounter++}`);
-    const childKeys: string[] = [];
-    const rawChildren = Array.isArray(raw.children) ? raw.children : [];
-
-    elements[normalizedKey] = {
-      key: normalizedKey,
-      type: raw.type,
-      props: raw.props ?? {},
-      children: childKeys,
-      parentKey,
-    };
-
-    for (const child of rawChildren) {
-      if (typeof child === "string") {
-        childKeys.push(child);
-        continue;
-      }
-
-      if (isFlatElementLike(child)) {
-        const nestedKey = addElement(child.key ?? `el-${autoKeyCounter++}`, child, normalizedKey);
-        childKeys.push(nestedKey);
-      }
-    }
-
-    return normalizedKey;
-  };
-
-  for (const [key, raw] of Object.entries(input.elements)) {
-    if (!isFlatElementLike(raw)) continue;
-    if (elements[key]) continue;
-    addElement(key, raw, raw.parentKey ?? null);
-  }
-
-  for (const [key, element] of Object.entries(elements)) {
-    const childKeys = Array.isArray(element.children) ? element.children : [];
-    for (const childKey of childKeys) {
-      if (typeof childKey !== "string") continue;
-      const child = elements[childKey];
-      if (child && (child.parentKey == null || child.parentKey !== key)) {
-        child.parentKey = key;
-      }
-    }
-  }
-
-  let root = typeof input.root === "string" ? input.root : "";
-
-  if (!root || !elements[root]) {
-    const missingRootChildren = root
-      ? Object.entries(elements)
-          .filter(([, element]) => element.parentKey === root)
-          .map(([key]) => key)
-      : [];
-
-    if (missingRootChildren.length > 0) {
-      const rootKey = ensureKey(root || "root");
-      elements[rootKey] = {
-        key: rootKey,
-        type: "Card",
-        props: { title: "Answer" },
-        children: missingRootChildren,
-        parentKey: null,
-      };
-      for (const childKey of missingRootChildren) {
-        elements[childKey].parentKey = rootKey;
-      }
-      root = rootKey;
-    } else {
-      const candidateRoots = Object.entries(elements)
-        .filter(([, element]) => !element.parentKey || !elements[element.parentKey])
-        .map(([key]) => key);
-
-      if (candidateRoots.length === 1) {
-        root = candidateRoots[0];
-      } else if (candidateRoots.length > 1) {
-        const rootKey = ensureKey("root");
-        elements[rootKey] = {
-          key: rootKey,
-          type: "Card",
-          props: { title: "Answer" },
-          children: candidateRoots,
-          parentKey: null,
-        };
-        for (const childKey of candidateRoots) {
-          elements[childKey].parentKey = rootKey;
-        }
-        root = rootKey;
-      }
-    }
-  }
-
-  if (!root || !elements[root]) {
-    return undefined;
-  }
-
-  return { root, elements };
-}
-
-function parseTreeSpec(raw: string, shouldLog = false) {
-  const trimmed = raw.trim();
-  if (!trimmed) return undefined;
-
-  let jsonStr = trimmed;
-  const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlock) {
-    jsonStr = codeBlock[1].trim();
-  } else if (!trimmed.startsWith("{")) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (!parsed || typeof parsed !== "object") return undefined;
-
-    if (
-      typeof (parsed as any).root === "string" &&
-      (parsed as any).elements &&
-      typeof (parsed as any).elements === "object"
-    ) {
-      return normalizeFlatSpec(parsed as FlatSpecLike);
-    }
-
-    if (typeof (parsed as any).type === "string") {
-      return nestedToFlat(parsed);
-    }
-
-    return undefined;
-  } catch (error) {
-    if (shouldLog) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn("[Chat] JSON parse failed:", message, "Preview:", jsonStr.slice(0, 200));
-    }
-    return undefined;
-  }
-}
-
-function extractAssistantText(message: AssistantMessageLike) {
-  if (typeof message.content === "string" && message.content.trim()) {
-    return message.content;
-  }
-
-  const partsText = (message.parts ?? [])
-    .filter((part) => part?.type === "text")
-    .map((part) => {
-      if (typeof part.text === "string") return part.text;
-      if (part.text && typeof part.text === "object" && typeof part.text.value === "string") {
-        return part.text.value;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("");
-
-  return partsText;
-}
-
-function extractTreeFromMessage(message: AssistantMessageLike, shouldLog = false) {
-  const annotationTree = (message.annotations ?? []).find((annotation) => {
-    if (!annotation || typeof annotation !== "object") return false;
-    const value = annotation as Record<string, unknown>;
-    return (
-      (typeof value.root === "string" && !!value.elements && typeof value.elements === "object") ||
-      typeof value.type === "string"
+    return this.state.hasError ? (
+      <p className="jr-text">
+        This answer couldn’t be displayed. Please retry the response.
+      </p>
+    ) : (
+      this.props.children
     );
-  });
-
-  if (annotationTree) {
-    if (
-      typeof (annotationTree as any).root === "string" &&
-      (annotationTree as any).elements &&
-      typeof (annotationTree as any).elements === "object"
-    ) {
-      return annotationTree;
-    }
-    if (typeof (annotationTree as any).type === "string") {
-      return nestedToFlat(annotationTree as Record<string, unknown>);
-    }
   }
-
-  return parseTreeSpec(extractAssistantText(message), shouldLog);
 }
-
-const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: any, index: number, tree?: any, isLoading?: boolean }) => {
-  const isJsonLike = (s: string) => /^\s*({|```)/.test(s);
-  const assistantText = message.role === "assistant"
-    ? extractAssistantText(message as AssistantMessageLike)
-    : "";
-  const hasAssistantText = !!assistantText.trim();
-  const hasUserText = typeof message.content === "string" && !!message.content.trim();
-  
+function ThinkingSkeleton() {
   return (
     <div
-      className={`chat-message chat-message-${message.role}`}
-      style={{
-        animationDelay: `${index * 40}ms`,
-      }}
+      className="thinking-skeleton"
+      role="status"
+      aria-label="Preparing an answer"
     >
-      {message.role === "user" ? (
-        <div className="bubble bubble-user">
-          {hasUserText ? message.content : ""}
-        </div>
-      ) : (
-        <div className="bubble bubble-assistant">
-          {"tree" in message && message.tree ? (
-            <RenderErrorBoundary>
-              <Renderer
-                spec={message.tree}
-                registry={componentRegistry}
-              />
-            </RenderErrorBoundary>
-          ) : tree ? (
-            <RenderErrorBoundary>
-              <Renderer
-                spec={tree}
-                registry={componentRegistry}
-              />
-            </RenderErrorBoundary>
-          ) : isLoading && (!hasAssistantText || isJsonLike(assistantText)) ? (
-            <ThinkingSkeleton />
-          ) : (
-            <p className="jr-text jr-text-muted">
-              {hasAssistantText && !isJsonLike(assistantText)
-                ? assistantText
-                : hasAssistantText
-                  ? "Couldn't display response"
-                  : "Thinking..."}
-            </p>
-          )}
-        </div>
-      )}
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+const ChatMessageItem = memo(function ChatMessageItem({
+  message,
+  streaming,
+}: {
+  message: ProfileMessage;
+  streaming: boolean;
+}) {
+  const data = getAnswer(message);
+  const tree = useMemo(
+    () => (data ? answerTree(data.answer) : undefined),
+    [data],
+  );
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+  if (message.role === "user")
+    return (
+      <div className="chat-message chat-message-user">
+        <div className="bubble bubble-user">{getMessageText(message)}</div>
+      </div>
+    );
+  return (
+    <div className="chat-message chat-message-assistant">
+      <div className="bubble bubble-assistant">
+        {tree ? (
+          <RenderErrorBoundary>
+            <Renderer spec={tree} registry={componentRegistry} />
+          </RenderErrorBoundary>
+        ) : streaming ? (
+          <ThinkingSkeleton />
+        ) : (
+          <p className="jr-text jr-text-muted">No complete answer yet.</p>
+        )}
+        {data?.complete && !streaming ? (
+          <button
+            className="chat-copy"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(answerText(data.answer));
+                setCopyStatus("copied");
+              } catch {
+                setCopyStatus("failed");
+              }
+            }}
+          >
+            {copyStatus === "copied"
+              ? "Copied"
+              : copyStatus === "failed"
+                ? "Copy unavailable — select text to copy"
+                : "Copy answer"}
+          </button>
+        ) : data && !streaming ? (
+          <p className="chat-partial">Partial answer · you can retry below.</p>
+        ) : null}
+      </div>
     </div>
   );
 });
 
-function ThinkingSkeleton() {
-  return (
-    <div className="thinking-skeleton" aria-label="Arthur is composing a response">
-      <span />
-      <span />
-      <span />
-    </div>
-  );
-}
-
 export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
-  const [treeById, setTreeById] = useState<Record<string, any>>({});
-  const [followUps, setFollowUps] = useState<string[]>([]);
-  const [questionCount, setQuestionCount] = useState(0);
   const [input, setInput] = useState("");
-  const chatThreadRef = useRef<HTMLDivElement | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
-  const lastUserQuestionRef = useRef("");
-  const introMessage = useMemo(
-    () => ({ id: "intro", role: "assistant", content: "intro", tree: buildIntroTree() }),
-    [],
-  );
-
   const [audioState, setAudioState] = useState<AudioState>("paused");
-
-  useEffect(() => {
-    return audioManager.subscribe(setAudioState);
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("question-count", String(questionCount));
-    } catch {
-      // Ignore storage failures in restricted browsing contexts.
-    }
-  }, [questionCount]);
-
-  useEffect(() => {
-    try {
-      const persisted = Number(window.localStorage.getItem("question-count") ?? "0");
-      if (Number.isFinite(persisted) && persisted > 0) {
-        setQuestionCount(Math.min(MAX_QUESTIONS, persisted));
-      }
-    } catch {
-      // Ignore storage failures in restricted browsing contexts.
-    }
-  }, []);
-
-  const { messages, setMessages, append, isLoading, error } = useChat({
-    api: "/api/generate",
-    streamProtocol: "text",
-    onFinish: (message) => {
-      if (message.role !== "assistant") return;
-      const tree = extractTreeFromMessage(message as AssistantMessageLike, true);
-      if (!tree) return;
-      setTreeById((prev) => ({ ...prev, [message.id]: tree }));
-    },
-    onError: (err) => console.error("[Chat] API error:", err),
-  });
-
-  useEffect(() => {
-    if (error) console.error("[Chat] useChat error:", error.message, error);
-  }, [error]);
-
-  const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
-    () => [introMessage, ...messages],
-    [introMessage, messages],
-  );
-  const lastMessage = messages[messages.length - 1];
+  const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const followScroll = useRef(true);
+  const inFlight = useRef(false);
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    regenerate,
+    stop,
+    clearError,
+    status,
+    error,
+  } = useChat<ProfileMessage>({ transport, dataPartSchemas });
+  const busy = status === "submitted" || status === "streaming";
+  const questionCount = messages.filter(
+    (message) => message.role === "user",
+  ).length;
   const isLocked = questionCount >= MAX_QUESTIONS;
-  const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const thread = chatThreadRef.current;
-    if (thread) {
-      thread.scrollTo({
-        top: thread.scrollHeight,
-        behavior,
-      });
-      return;
-    }
-    endRef.current?.scrollIntoView({ behavior, block: "end" });
-  }, []);
+  const remaining = MAX_QUESTIONS - questionCount;
+  const lastMessage = messages.at(-1);
+  const lastAnswer =
+    lastMessage?.role === "assistant" ? getAnswer(lastMessage) : undefined;
+  const followUps =
+    !busy && !error && lastAnswer?.complete ? lastAnswer.answer.followUps : [];
+  const canRetry =
+    !busy &&
+    messages.some((message) => message.role === "user") &&
+    (Boolean(error) ||
+      (lastMessage?.role === "assistant" && !lastAnswer?.complete) ||
+      lastMessage?.role === "user");
+
+  useEffect(() => audioManager.subscribe(setAudioState), []);
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
+  }, [input]);
+  useEffect(() => {
+    if (!busy) inFlight.current = false;
+  }, [busy]);
+  useEffect(() => {
+    if (!followScroll.current) return;
+    const frame = requestAnimationFrame(() => {
+      const thread = threadRef.current;
+      if (thread)
+        thread.scrollTo({ top: thread.scrollHeight, behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, busy, error]);
+  useEffect(
+    () => () => {
+      void stop();
+    },
+    [stop],
+  );
 
   const sendPrompt = useCallback(
-    (promptText: string) => {
-      const trimmed = promptText.trim();
-      if (!trimmed || !enabled || isLoading) return;
-      if (questionCount >= MAX_QUESTIONS) return;
-
-      const nextCount = questionCount + 1;
-      setQuestionCount(nextCount);
-      lastUserQuestionRef.current = trimmed;
-      setFollowUps([]);
-      const userId = `user-${Date.now()}`;
-
-      if (nextCount >= MAX_QUESTIONS) {
-        const assistantId = `assistant-${Date.now()}`;
-        setMessages((prev) => [
-          ...prev,
-          { id: userId, role: "user", content: trimmed },
-          { id: assistantId, role: "assistant", content: "Here is how to reach Arthur." },
-        ]);
-        setTreeById((prev) => ({
-          ...prev,
-          [assistantId]: buildContactTree() as any,
-        }));
-        requestAnimationFrame(() => scrollToBottom("smooth"));
+    (text: string) => {
+      const value = text.trim();
+      if (
+        !value ||
+        value.length > MAX_INPUT_LENGTH ||
+        !enabled ||
+        busy ||
+        isLocked ||
+        inFlight.current
+      )
         return;
-      }
-
-      append({ role: "user", content: trimmed, id: userId });
-      requestAnimationFrame(() => scrollToBottom("smooth"));
+      inFlight.current = true;
+      followScroll.current = true;
+      clearError();
+      setInput("");
+      void sendMessage({ text: value }).finally(() => {
+        inFlight.current = false;
+      });
     },
-    [append, enabled, isLoading, questionCount, scrollToBottom, setMessages],
+    [busy, clearError, enabled, isLocked, sendMessage],
   );
-
-  const handleSend = useCallback(() => {
-    sendPrompt(input);
-    setInput("");
-  }, [input, sendPrompt, setInput]);
-
-  const handleResetChat = useCallback(() => {
+  const reset = async () => {
+    await stop();
+    clearError();
     setMessages([]);
-    setTreeById({});
-    setFollowUps([]);
-    setQuestionCount(0);
     setInput("");
-    lastUserQuestionRef.current = "";
-    try {
-      window.localStorage.setItem("question-count", "0");
-    } catch {
-      // Ignore storage failures in restricted browsing contexts.
-    }
-  }, [setMessages, setInput]);
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend],
-  );
-
-  const promptButtons = useMemo(
-    () =>
-      quickPrompts.map((item) => (
-        <button
-          key={item.label}
-          className="starter-prompt"
-          type="button"
-          disabled={isLoading || !enabled}
-          onClick={() => {
-            sendPrompt(item.prompt);
-            setInput("");
-            if (window.matchMedia("(max-width: 768px)").matches) {
-              requestAnimationFrame(() => scrollToBottom("smooth"));
-            }
-          }}
-        >
-          <span>
-            <strong>{item.label}</strong>
-            <small>{item.detail}</small>
-          </span>
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" />
-            <path d="m13 6 6 6-6 6" />
-          </svg>
-        </button>
-      )),
-    [sendPrompt, setInput, isLoading, enabled, scrollToBottom],
-  );
-
-  const followUpButtons = useMemo(
-    () =>
-      followUps.map((prompt) => (
-        <button
-          key={prompt}
-          className="chip"
-          type="button"
-          disabled={isLoading || !enabled}
-          onClick={() => {
-            sendPrompt(prompt);
-            setInput("");
-            if (window.matchMedia("(max-width: 768px)").matches) {
-              requestAnimationFrame(() => scrollToBottom("smooth"));
-            }
-          }}
-        >
-          {prompt}
-        </button>
-      )),
-    [followUps, sendPrompt, setInput, isLoading, enabled, scrollToBottom],
-  );
-
-  useEffect(() => {
-    setTreeById((prev) => {
-      let next = prev;
-
-      for (const message of messages) {
-        if (message.role !== "assistant" || prev[message.id]) continue;
-        const tree = extractTreeFromMessage(message as AssistantMessageLike, !isLoading);
-        if (!tree) continue;
-        if (next === prev) next = { ...prev };
-        next[message.id] = tree;
-      }
-
-      return next;
+    inFlight.current = false;
+    followScroll.current = true;
+  };
+  const retry = () => {
+    if (busy || inFlight.current || !enabled) return;
+    inFlight.current = true;
+    followScroll.current = true;
+    clearError();
+    void regenerate().finally(() => {
+      inFlight.current = false;
     });
-  }, [messages, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading && lastMessage?.role === 'assistant') {
-       const question = lastUserQuestionRef.current;
-       setFollowUps(getFollowUps(question));
-       requestAnimationFrame(() => scrollToBottom("smooth"));
-       window.setTimeout(() => scrollToBottom("smooth"), 80);
-    }
-  }, [isLoading, lastMessage, scrollToBottom]);
-
-  useEffect(() => {
-    if (isLoading) {
-      requestAnimationFrame(() => scrollToBottom("auto"));
-    }
-  }, [messages, isLoading, scrollToBottom]);
-
-  useEffect(() => {
-    if (followUps.length > 0 || isLocked) {
-      requestAnimationFrame(() => scrollToBottom("smooth"));
-    }
-  }, [followUps.length, isLocked, scrollToBottom]);
+  };
 
   return (
     <section className="chat-panel">
       <ChatBackground />
       <div className="chat-content">
-        <div className="chat-thread" ref={chatThreadRef}>
+        <div
+          className="chat-thread"
+          ref={threadRef}
+          onScroll={() => {
+            const thread = threadRef.current;
+            if (thread)
+              followScroll.current =
+                thread.scrollHeight - thread.scrollTop - thread.clientHeight <
+                120;
+          }}
+        >
           <header className="chat-header">
             <div className="chat-header-top">
               <div className="chat-header-text">
-                <p className="eyebrow"><span className="presence-dot" /> Senior Software Engineer at Anduril</p>
-                <h2>Arthur Zhuk</h2>
+                <p className="eyebrow">
+                  <span className="presence-dot" /> Arthur’s AI profile guide
+                </p>
+                <h2>Get to know Arthur.</h2>
                 <p className="muted">
-                  I build mission-critical software, care deeply about good systems,
-                  and stay close to the product. Ask me what you are curious about.
+                  Explore his work, technical experience, and life beyond the
+                  code. Answers are based on his published profile.
                 </p>
               </div>
               <div className="chat-header-audio">
-                {audioState === "playing" ? (
-                  <div className="audio-now-playing">
-                    <div className="audio-bars">
-                      <span className="bar"></span>
-                      <span className="bar"></span>
-                      <span className="bar"></span>
-                    </div>
-                    <span className="audio-title">
-                      Arthur of Silver Lake
-                    </span>
-                  </div>
-                ) : null}
                 <button
                   className="icon-button"
                   type="button"
                   onClick={() => audioManager.toggle()}
-                  aria-label={audioState === "playing" ? "Pause soundtrack" : "Play soundtrack"}
-                  title={audioState === "playing" ? "Pause soundtrack" : "Play Arthur of Silver Lake"}
+                  aria-label={
+                    audioState === "playing"
+                      ? "Pause soundtrack"
+                      : "Play soundtrack"
+                  }
                 >
-                  {audioState === "playing" ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
-                  )}
+                  {audioState === "playing" ? "Ⅱ" : "♫"}
                 </button>
-                {messages.length > 0 ? (
+                {messages.length > 0 && (
                   <button
                     className="icon-button"
                     type="button"
-                    onClick={handleResetChat}
+                    onClick={() => void reset()}
                     aria-label="Start a new conversation"
-                    title="Start over"
                   >
-                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                      <path d="M3 3v5h5" />
-                    </svg>
+                    ↺
                   </button>
-                ) : null}
+                )}
               </div>
             </div>
-            {messages.length === 0 ? (
-              <div className="starter-prompts">{promptButtons}</div>
-            ) : null}
+            {messages.length === 0 && (
+              <div className="starter-prompts">
+                {quickPrompts.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="starter-prompt"
+                    disabled={busy || !enabled}
+                    onClick={() => sendPrompt(item.prompt)}
+                  >
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                    <span aria-hidden="true">↗</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </header>
-
           <JSONUIProvider registry={componentRegistry}>
-            {combinedMessages.map((message, index) => (
-              <ChatMessageItem
-                key={message.id}
-                message={message}
-                index={index}
-                tree={treeById[message.id]}
-                isLoading={isLoading}
-              />
-            ))}
-            {isLoading && lastMessage?.role === "user" ? (
-              <div className="chat-message chat-message-assistant">
-                <div className="bubble bubble-assistant">
-                  <ThinkingSkeleton />
+            {messages.length === 0 && (
+              <div className="bubble bubble-assistant">
+                <Renderer spec={introTree} registry={componentRegistry} />
+              </div>
+            )}
+            <div aria-label="Conversation" aria-busy={busy}>
+              {messages.map((message) => (
+                <ChatMessageItem
+                  key={message.id}
+                  message={message}
+                  streaming={busy && message.id === lastMessage?.id}
+                />
+              ))}
+            </div>
+            {busy && lastMessage?.role !== "assistant" && (
+              <div className="bubble bubble-assistant">
+                <ThinkingSkeleton />
+              </div>
+            )}
+            {error && (
+              <div className="chat-error" role="alert">
+                <strong>The answer couldn’t be completed.</strong>
+                <span>{error.message}</span>
+              </div>
+            )}
+            {canRetry && (
+              <button
+                className="chip chat-retry"
+                disabled={!enabled}
+                onClick={retry}
+              >
+                Retry response ↻
+              </button>
+            )}
+            {followUps.length > 0 && (
+              <div className="followup-row followup-inline">
+                <p className="followup-label">Keep exploring</p>
+                <div className="chip-row">
+                  {followUps.map((prompt) => (
+                    <button
+                      className="chip"
+                      key={prompt}
+                      disabled={!enabled || isLocked}
+                      onClick={() => sendPrompt(prompt)}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : null}
-            {error ? (
-              <div className="chat-error" role="alert">
-                <strong>Response failed</strong>
-                <span>{error.message || "Try again in a moment."}</span>
+            )}
+            {isLocked && !busy && (
+              <div className="chat-session-limit">
+                <p>You’ve reached 30 questions in this conversation.</p>
+                <button className="chip" onClick={() => void reset()}>
+                  Start a new conversation
+                </button>
+                <a href={`mailto:${profileData.contact.email}`}>
+                  Contact Arthur ↗
+                </a>
               </div>
-            ) : null}
-            {followUps.length > 0 ? (
-              <div className="followup-row followup-inline">
-                <p className="followup-label">Try asking</p>
-                <div className="chip-row">{followUpButtons}</div>
-              </div>
-            ) : null}
-            {isLocked ? (
-              <div className="followup-row followup-inline">
-                <p className="followup-label">
-                  You have reached the question limit. Please reach out directly.
-                </p>
-              </div>
-            ) : null}
-            <div ref={endRef} />
+            )}
           </JSONUIProvider>
         </div>
-
-        <footer className="chat-input">
+        <form
+          className="chat-input"
+          onSubmit={(event) => {
+            event.preventDefault();
+            sendPrompt(input);
+          }}
+        >
           <div className="chat-input-meta">
-            <p className="chat-hint">Ask me anything</p>
-            {remainingQuestions <= 5 ? (
-              <p className="chat-counter">{remainingQuestions} questions remaining</p>
-            ) : null}
+            <p className="chat-hint">
+              {busy ? "Composing an answer…" : "Ask about Arthur"}
+            </p>
+            {remaining <= 5 && (
+              <p className="chat-counter">{remaining} questions remaining</p>
+            )}
           </div>
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={enabled ? "Ask about experience, skills, or projects..." : "AI chat is not connected in this preview"}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                sendPrompt(input);
+              }
+            }}
+            placeholder={
+              enabled
+                ? "Ask about Arthur…"
+                : "AI chat is not connected in this preview"
+            }
             rows={1}
-            disabled={isLoading || isLocked || !enabled}
+            maxLength={MAX_INPUT_LENGTH}
+            disabled={isLocked || !enabled}
             aria-label="Ask a question about Arthur"
           />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading || isLocked || !enabled}
-            aria-label="Send message"
-          >
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m5 12 7-7 7 7" />
-              <path d="M12 19V5" />
-            </svg>
-          </button>
-        </footer>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => void stop()}
+              aria-label="Stop response"
+            >
+              ■
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim() || isLocked || !enabled}
+              aria-label="Send message"
+            >
+              ↑
+            </button>
+          )}
+        </form>
+        <p className="chat-disclosure" role="status">
+          {busy
+            ? "Generating an AI answer. You can stop it at any time."
+            : "AI-generated answers can make mistakes. Confirm important details with Arthur."}
+        </p>
       </div>
     </section>
   );

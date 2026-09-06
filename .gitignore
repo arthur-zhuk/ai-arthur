@@ -12,3 +12,5 @@ pnpm-debug.log*
 .next-dev/
 
 out/
+
+*.tsbuildinfo

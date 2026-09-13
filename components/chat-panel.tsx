@@ -13,7 +13,6 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { buildIntroTree } from "@/lib/answer";
 import {
   answerDataSchema,
   answerText,
@@ -25,7 +24,6 @@ import {
   type ProfileMessage,
 } from "@/lib/chat/schema";
 import { profileData } from "@/lib/profile-data";
-import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
 
@@ -33,7 +31,6 @@ const transport = new DefaultChatTransport<ProfileMessage>({
   api: "/api/generate",
 });
 const dataPartSchemas = { answer: answerDataSchema };
-const introTree = buildIntroTree();
 const quickPrompts = [
   {
     label: "Current work",
@@ -112,6 +109,9 @@ const ChatMessageItem = memo(function ChatMessageItem({
   return (
     <div className="chat-message chat-message-assistant">
       <div className="bubble bubble-assistant">
+        <p className="chat-speaker">
+          <span aria-hidden="true">✷</span> AI Arthur
+        </p>
         {tree ? (
           <RenderErrorBoundary>
             <Renderer spec={tree} registry={componentRegistry} />
@@ -193,7 +193,10 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
     if (!busy) inFlight.current = false;
   }, [busy]);
   useEffect(() => {
-    if (!followScroll.current) return;
+    if (!followScroll.current || messages.length === 0) {
+      if (messages.length === 0) threadRef.current?.scrollTo({ top: 0 });
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       const thread = threadRef.current;
       if (thread)
@@ -249,9 +252,45 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
   };
 
   return (
-    <section className="chat-panel">
-      <ChatBackground />
+    <section
+      className={`chat-panel ${messages.length ? "chat-panel-active" : "chat-panel-welcome"}`}
+    >
       <div className="chat-content">
+        <div className="chat-toolbar">
+          <p>
+            <span className="presence-dot" /> Based on Arthur’s published
+            profile
+          </p>
+          <div className="chat-header-audio">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => audioManager.toggle()}
+              aria-label={
+                audioState === "playing"
+                  ? "Pause soundtrack"
+                  : "Play soundtrack"
+              }
+              title={
+                audioState === "playing"
+                  ? "Pause soundtrack"
+                  : "Play soundtrack"
+              }
+            >
+              {audioState === "playing" ? "Ⅱ" : "♫"}
+            </button>
+            {messages.length > 0 && (
+              <button
+                className="chat-new"
+                type="button"
+                onClick={() => void reset()}
+                aria-label="Start a new conversation"
+              >
+                <span aria-hidden="true">↺</span> New chat
+              </button>
+            )}
+          </div>
+        </div>
         <div
           className="chat-thread"
           ref={threadRef}
@@ -263,44 +302,17 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
                 120;
           }}
         >
-          <header className="chat-header">
-            <div className="chat-header-top">
-              <div className="chat-header-text">
-                <p className="eyebrow">
-                  <span className="presence-dot" /> Arthur’s AI profile guide
-                </p>
-                <h2>Get to know Arthur.</h2>
-                <p className="muted">
-                  Explore his work, technical experience, and life beyond the
-                  code. Answers are based on his published profile.
-                </p>
+          {messages.length === 0 && (
+            <header className="chat-header">
+              <div className="chat-welcome-mark" aria-hidden="true">
+                ✷
               </div>
-              <div className="chat-header-audio">
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={() => audioManager.toggle()}
-                  aria-label={
-                    audioState === "playing"
-                      ? "Pause soundtrack"
-                      : "Play soundtrack"
-                  }
-                >
-                  {audioState === "playing" ? "Ⅱ" : "♫"}
-                </button>
-                {messages.length > 0 && (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() => void reset()}
-                    aria-label="Start a new conversation"
-                  >
-                    ↺
-                  </button>
-                )}
-              </div>
-            </div>
-            {messages.length === 0 && (
+              <p className="eyebrow">A little more than a résumé</p>
+              <h2>What are you curious about?</h2>
+              <p className="muted">
+                Explore Arthur’s work, how he builds, and life beyond the code.
+                Pick a starting point, or ask your own question.
+              </p>
               <div className="starter-prompts">
                 {quickPrompts.map((item) => (
                   <button
@@ -318,15 +330,14 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
                   </button>
                 ))}
               </div>
-            )}
-          </header>
+            </header>
+          )}
           <JSONUIProvider registry={componentRegistry}>
-            {messages.length === 0 && (
-              <div className="bubble bubble-assistant">
-                <Renderer spec={introTree} registry={componentRegistry} />
-              </div>
-            )}
-            <div aria-label="Conversation" aria-busy={busy}>
+            <div
+              className="chat-messages"
+              aria-label="Conversation"
+              aria-busy={busy}
+            >
               {messages.map((message) => (
                 <ChatMessageItem
                   key={message.id}
@@ -367,6 +378,7 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
                       onClick={() => sendPrompt(prompt)}
                     >
                       {prompt}
+                      <span aria-hidden="true">↗</span>
                     </button>
                   ))}
                 </div>
@@ -385,68 +397,70 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
             )}
           </JSONUIProvider>
         </div>
-        <form
-          className="chat-input"
-          onSubmit={(event) => {
-            event.preventDefault();
-            sendPrompt(input);
-          }}
-        >
-          <div className="chat-input-meta">
-            <p className="chat-hint">
-              {busy ? "Composing an answer…" : "Ask about Arthur"}
-            </p>
-            {remaining <= 5 && (
-              <p className="chat-counter">{remaining} questions remaining</p>
-            )}
-          </div>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                sendPrompt(input);
-              }
+        <div className="chat-composer">
+          <form
+            className="chat-input"
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendPrompt(input);
             }}
-            placeholder={
-              enabled
-                ? "Ask about Arthur…"
-                : "AI chat is not connected in this preview"
-            }
-            rows={1}
-            maxLength={MAX_INPUT_LENGTH}
-            disabled={isLocked || !enabled}
-            aria-label="Ask a question about Arthur"
-          />
-          {busy ? (
-            <button
-              type="button"
-              onClick={() => void stop()}
-              aria-label="Stop response"
-            >
-              ■
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!input.trim() || isLocked || !enabled}
-              aria-label="Send message"
-            >
-              ↑
-            </button>
-          )}
-        </form>
-        <p className="chat-disclosure" role="status">
-          {busy
-            ? "Generating an AI answer. You can stop it at any time."
-            : "AI-generated answers can make mistakes. Confirm important details with Arthur."}
-        </p>
+          >
+            <div className="chat-input-meta">
+              <p className="chat-hint">
+                {busy ? "Composing an answer…" : "Your next question"}
+              </p>
+              {remaining <= 5 && (
+                <p className="chat-counter">{remaining} questions remaining</p>
+              )}
+            </div>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  sendPrompt(input);
+                }
+              }}
+              placeholder={
+                enabled
+                  ? "Ask about Arthur…"
+                  : "AI chat is not connected in this preview"
+              }
+              rows={1}
+              maxLength={MAX_INPUT_LENGTH}
+              disabled={isLocked || !enabled}
+              aria-label="Ask a question about Arthur"
+            />
+            {busy ? (
+              <button
+                type="button"
+                onClick={() => void stop()}
+                aria-label="Stop response"
+              >
+                ■
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim() || isLocked || !enabled}
+                aria-label="Send message"
+              >
+                ↑
+              </button>
+            )}
+          </form>
+          <p className="chat-disclosure" role="status">
+            {busy
+              ? "Generating an AI answer. You can stop it at any time."
+              : "AI guide, not Arthur himself. Confirm important details with him."}
+          </p>
+        </div>
       </div>
     </section>
   );

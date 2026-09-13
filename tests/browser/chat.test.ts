@@ -92,6 +92,14 @@ test(
       const input = page.getByRole("textbox", {
         name: "Ask a question about Arthur",
       });
+      await page
+        .getByRole("heading", { name: "What are you curious about?" })
+        .waitFor();
+      assert.equal(
+        await page.locator(".chat-thread").evaluate((el) => el.scrollTop),
+        0,
+        "Opening chat must show the welcome heading, not scroll to the bottom",
+      );
       await input.fill("What did Arthur do at Insight Rx?");
       await page.getByRole("button", { name: "Send message" }).click();
       await page

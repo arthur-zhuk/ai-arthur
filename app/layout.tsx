@@ -31,10 +31,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${outfit.variable} ${geistMono.variable}`}
-    >
+    <html lang="en" className={`${outfit.variable} ${geistMono.variable}`}>
       <body>{children}</body>
     </html>
   );

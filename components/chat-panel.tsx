@@ -1,579 +1,220 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef, useEffect, memo, Component, type ReactNode } from "react";
+import {
+  Component,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { nestedToFlat } from "@json-render/core";
-import { ArrowUp, ArrowUpRight, Music2, Pause, RotateCcw } from "lucide-react";
-import { buildContactTree } from "@/lib/answer";
+import { ArrowUp, ArrowUpRight, Music2, Pause, RotateCcw, Square } from "lucide-react";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
+import {
+  answerDataSchema,
+  answerTree,
+  getAnswer,
+  getMessageText,
+  MAX_INPUT_LENGTH,
+  MAX_QUESTIONS,
+  type ProfileMessage,
+} from "@/lib/chat/schema";
 import { profileData } from "@/lib/profile-data";
 
+const transport = new DefaultChatTransport<ProfileMessage>({ api: "/api/generate" });
+const dataPartSchemas = { answer: answerDataSchema };
 const quickPrompts = [
   {
     label: "Current work",
     detail: "Anduril and recent roles",
-    prompt: "Tell me about your current work at Anduril and your most recent roles.",
+    prompt: "Tell me about Arthur's current work at Anduril and his most recent roles.",
   },
   {
     label: "Engineering depth",
     detail: "Backend, systems, and frontend",
-    prompt: "What are your strongest backend, systems, and frontend skills?",
+    prompt: "What are Arthur's strongest backend, systems, and frontend skills?",
   },
   {
     label: "Career highlights",
     detail: "Impact across 10+ years",
-    prompt: "Walk me through the biggest highlights and impact from your career.",
+    prompt: "Walk me through the biggest highlights and impact from Arthur's career.",
   },
   {
     label: "Beyond work",
     detail: "Interests, tools, and contact",
-    prompt: "What should I know about you beyond work, including your interests and how to get in touch?",
+    prompt: "What should I know about Arthur beyond work, including his interests and how to get in touch?",
   },
 ];
 
-const followUpBank = {
-  general: [
-    "What industries have you worked in?",
-    "What are your strongest frontend strengths?",
-    "What are your strongest backend strengths?",
-    "How can I get in contact with Arthur?",
-  ],
-  experience: [
-    "What are you doing at Anduril?",
-    "What was your impact at Travel Syndicate Technology?",
-    "What kind of teams have you led?",
-  ],
-  skills: [
-    "What is your preferred tech stack?",
-    "What backend experience do you have?",
-    "What databases are you proficient in?",
-  ],
-  contact: [
-    "Where can I find your GitHub?",
-    "Are you open to new opportunities?",
-    "What is the best way to reach you?",
-  ],
-};
-
-const MAX_QUESTIONS = 30;
-
-class RenderErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }> {
+class RenderErrorBoundary extends Component<{ children: ReactNode }> {
   state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error: Error) { console.error("[Chat] Renderer error:", error.message, error); }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
   render() {
-    if (this.state.hasError) return this.props.fallback ?? <p className="jr-text jr-text-muted">Failed to render response</p>;
+    if (this.state.hasError) {
+      return <p className="jr-text jr-text-muted">This answer could not be displayed.</p>;
+    }
     return this.props.children;
   }
 }
 
-function getFollowUps(question: string) {
-  const normalized = question.toLowerCase();
-  if (
-    normalized.includes("contact") ||
-    normalized.includes("email") ||
-    normalized.includes("get in touch") ||
-    normalized.includes("reach you")
-  ) {
-    return followUpBank.contact;
-  }
-  if (
-    normalized.includes("experience") ||
-    normalized.includes("roles") ||
-    normalized.includes("company")
-  ) {
-    return followUpBank.experience;
-  }
-  if (
-    normalized.includes("stack") ||
-    normalized.includes("skills") ||
-    normalized.includes("tech")
-  ) {
-    return followUpBank.skills;
-  }
-  return followUpBank.general;
-}
-
-type MessageTextPart =
-  | { type?: string; text?: string }
-  | { type?: string; text?: { value?: string } };
-
-type AssistantMessageLike = {
-  id: string;
-  role: string;
-  content?: string | null;
-  parts?: MessageTextPart[];
-  annotations?: unknown[];
-};
-
-type FlatElementLike = {
-  key?: string;
-  type?: string;
-  props?: Record<string, unknown>;
-  children?: unknown[];
-  parentKey?: string | null;
-};
-
-type FlatSpecLike = {
-  root?: string;
-  elements?: Record<string, FlatElementLike>;
-};
-
-function isFlatElementLike(value: unknown): value is FlatElementLike {
-  return !!value && typeof value === "object" && typeof (value as FlatElementLike).type === "string";
-}
-
-function normalizeFlatSpec(input: FlatSpecLike) {
-  if (!input || typeof input !== "object" || !input.elements || typeof input.elements !== "object") {
-    return undefined;
-  }
-
-  const elements: Record<string, FlatElementLike> = {};
-  let autoKeyCounter = 0;
-
-  const ensureKey = (base: string) => {
-    let key = base || `el-${autoKeyCounter++}`;
-    while (elements[key]) {
-      key = `${base || "el"}-${autoKeyCounter++}`;
-    }
-    return key;
-  };
-
-  const addElement = (key: string, raw: FlatElementLike, parentKey: string | null) => {
-    const normalizedKey = ensureKey(key || raw.key || `el-${autoKeyCounter++}`);
-    const childKeys: string[] = [];
-    const rawChildren = Array.isArray(raw.children) ? raw.children : [];
-
-    elements[normalizedKey] = {
-      key: normalizedKey,
-      type: raw.type,
-      props: raw.props ?? {},
-      children: childKeys,
-      parentKey,
-    };
-
-    for (const child of rawChildren) {
-      if (typeof child === "string") {
-        childKeys.push(child);
-        continue;
-      }
-
-      if (isFlatElementLike(child)) {
-        const nestedKey = addElement(child.key ?? `el-${autoKeyCounter++}`, child, normalizedKey);
-        childKeys.push(nestedKey);
-      }
-    }
-
-    return normalizedKey;
-  };
-
-  for (const [key, raw] of Object.entries(input.elements)) {
-    if (!isFlatElementLike(raw)) continue;
-    if (elements[key]) continue;
-    addElement(key, raw, raw.parentKey ?? null);
-  }
-
-  for (const [key, element] of Object.entries(elements)) {
-    const childKeys = Array.isArray(element.children) ? element.children : [];
-    for (const childKey of childKeys) {
-      if (typeof childKey !== "string") continue;
-      const child = elements[childKey];
-      if (child && (child.parentKey == null || child.parentKey !== key)) {
-        child.parentKey = key;
-      }
-    }
-  }
-
-  let root = typeof input.root === "string" ? input.root : "";
-
-  if (!root || !elements[root]) {
-    const missingRootChildren = root
-      ? Object.entries(elements)
-          .filter(([, element]) => element.parentKey === root)
-          .map(([key]) => key)
-      : [];
-
-    if (missingRootChildren.length > 0) {
-      const rootKey = ensureKey(root || "root");
-      elements[rootKey] = {
-        key: rootKey,
-        type: "Card",
-        props: { title: "Answer" },
-        children: missingRootChildren,
-        parentKey: null,
-      };
-      for (const childKey of missingRootChildren) {
-        elements[childKey].parentKey = rootKey;
-      }
-      root = rootKey;
-    } else {
-      const candidateRoots = Object.entries(elements)
-        .filter(([, element]) => !element.parentKey || !elements[element.parentKey])
-        .map(([key]) => key);
-
-      if (candidateRoots.length === 1) {
-        root = candidateRoots[0];
-      } else if (candidateRoots.length > 1) {
-        const rootKey = ensureKey("root");
-        elements[rootKey] = {
-          key: rootKey,
-          type: "Card",
-          props: { title: "Answer" },
-          children: candidateRoots,
-          parentKey: null,
-        };
-        for (const childKey of candidateRoots) {
-          elements[childKey].parentKey = rootKey;
-        }
-        root = rootKey;
-      }
-    }
-  }
-
-  if (!root || !elements[root]) {
-    return undefined;
-  }
-
-  return { root, elements };
-}
-
-function parseTreeSpec(raw: string, shouldLog = false) {
-  const trimmed = raw.trim();
-  if (!trimmed) return undefined;
-
-  let jsonStr = trimmed;
-  const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlock) {
-    jsonStr = codeBlock[1].trim();
-  } else if (!trimmed.startsWith("{")) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (!parsed || typeof parsed !== "object") return undefined;
-
-    if (
-      typeof (parsed as any).root === "string" &&
-      (parsed as any).elements &&
-      typeof (parsed as any).elements === "object"
-    ) {
-      return normalizeFlatSpec(parsed as FlatSpecLike);
-    }
-
-    if (typeof (parsed as any).type === "string") {
-      return nestedToFlat(parsed);
-    }
-
-    return undefined;
-  } catch (error) {
-    if (shouldLog) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn("[Chat] JSON parse failed:", message, "Preview:", jsonStr.slice(0, 200));
-    }
-    return undefined;
-  }
-}
-
-function extractAssistantText(message: AssistantMessageLike) {
-  if (typeof message.content === "string" && message.content.trim()) {
-    return message.content;
-  }
-
-  const partsText = (message.parts ?? [])
-    .filter((part) => part?.type === "text")
-    .map((part) => {
-      if (typeof part.text === "string") return part.text;
-      if (part.text && typeof part.text === "object" && typeof part.text.value === "string") {
-        return part.text.value;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("");
-
-  return partsText;
-}
-
-function extractTreeFromMessage(message: AssistantMessageLike, shouldLog = false) {
-  const annotationTree = (message.annotations ?? []).find((annotation) => {
-    if (!annotation || typeof annotation !== "object") return false;
-    const value = annotation as Record<string, unknown>;
-    return (
-      (typeof value.root === "string" && !!value.elements && typeof value.elements === "object") ||
-      typeof value.type === "string"
-    );
-  });
-
-  if (annotationTree) {
-    if (
-      typeof (annotationTree as any).root === "string" &&
-      (annotationTree as any).elements &&
-      typeof (annotationTree as any).elements === "object"
-    ) {
-      return annotationTree;
-    }
-    if (typeof (annotationTree as any).type === "string") {
-      return nestedToFlat(annotationTree as Record<string, unknown>);
-    }
-  }
-
-  return parseTreeSpec(extractAssistantText(message), shouldLog);
-}
-
-const ChatMessageItem = memo(({ message, index, tree, isLoading }: { message: any, index: number, tree?: any, isLoading?: boolean }) => {
-  const isJsonLike = (s: string) => /^\s*({|```)/.test(s);
-  const assistantText = message.role === "assistant"
-    ? extractAssistantText(message as AssistantMessageLike)
-    : "";
-  const hasAssistantText = !!assistantText.trim();
-  const hasUserText = typeof message.content === "string" && !!message.content.trim();
-  
+function ThinkingSkeleton() {
   return (
-    <div
-      className={`chat-message chat-message-${message.role}`}
-      style={{
-        animationDelay: `${index * 40}ms`,
-      }}
-    >
-      {message.role === "user" ? (
-        <div className="bubble bubble-user">
-          {hasUserText ? message.content : ""}
-        </div>
-      ) : (
-        <div className="bubble bubble-assistant">
-          {"tree" in message && message.tree ? (
-            <RenderErrorBoundary>
-              <Renderer
-                spec={message.tree}
-                registry={componentRegistry}
-              />
-            </RenderErrorBoundary>
-          ) : tree ? (
-            <RenderErrorBoundary>
-              <Renderer
-                spec={tree}
-                registry={componentRegistry}
-              />
-            </RenderErrorBoundary>
-          ) : isLoading && (!hasAssistantText || isJsonLike(assistantText)) ? (
-            <ThinkingSkeleton />
-          ) : (
-            <p className="jr-text jr-text-muted">
-              {hasAssistantText && !isJsonLike(assistantText)
-                ? assistantText
-                : hasAssistantText
-                  ? "Couldn't display response"
-                  : "Thinking..."}
-            </p>
-          )}
-        </div>
-      )}
+    <div className="thinking-skeleton" role="status" aria-label="Preparing an answer">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+const ChatMessageItem = memo(function ChatMessageItem({
+  message,
+  streaming,
+}: {
+  message: ProfileMessage;
+  streaming: boolean;
+}) {
+  const data = getAnswer(message);
+  const tree = useMemo(() => (data ? answerTree(data.answer) : undefined), [data]);
+
+  if (message.role === "user") {
+    return (
+      <div className="chat-message chat-message-user">
+        <div className="bubble bubble-user">{getMessageText(message)}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-message chat-message-assistant">
+      <div className="bubble bubble-assistant">
+        {tree ? (
+          <RenderErrorBoundary>
+            <Renderer spec={tree} registry={componentRegistry} />
+          </RenderErrorBoundary>
+        ) : streaming ? (
+          <ThinkingSkeleton />
+        ) : (
+          <p className="jr-text jr-text-muted">No complete answer yet.</p>
+        )}
+      </div>
     </div>
   );
 });
 
-function ThinkingSkeleton() {
-  return (
-    <div className="thinking-skeleton" aria-label="Arthur is composing a response">
-      <span />
-      <span />
-      <span />
-    </div>
-  );
-}
-
-export default function ChatPanel() {
-  const [treeById, setTreeById] = useState<Record<string, any>>({});
-  const [followUps, setFollowUps] = useState<string[]>([]);
-  const [questionCount, setQuestionCount] = useState(0);
+export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
   const [input, setInput] = useState("");
-  const chatThreadRef = useRef<HTMLDivElement | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
-  const lastUserQuestionRef = useRef("");
-
   const [audioState, setAudioState] = useState<AudioState>("paused");
-
-  useEffect(() => {
-    return audioManager.subscribe(setAudioState);
-  }, []);
-
-  const { messages, setMessages, append, isLoading, error } = useChat({
-    api: "/api/generate",
-    streamProtocol: "text",
-    onFinish: (message) => {
-      if (message.role !== "assistant") return;
-      const tree = extractTreeFromMessage(message as AssistantMessageLike, true);
-      if (!tree) return;
-      setTreeById((prev) => ({ ...prev, [message.id]: tree }));
-    },
-    onError: (err) => console.error("[Chat] API error:", err),
-  });
-
-  useEffect(() => {
-    if (error) console.error("[Chat] useChat error:", error.message, error);
-  }, [error]);
-
-  const lastMessage = messages[messages.length - 1];
+  const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const followScroll = useRef(true);
+  const inFlight = useRef(false);
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    regenerate,
+    stop,
+    clearError,
+    status,
+    error,
+  } = useChat<ProfileMessage>({ transport, dataPartSchemas });
+  const busy = status === "submitted" || status === "streaming";
+  const questionCount = messages.filter((message) => message.role === "user").length;
   const isLocked = questionCount >= MAX_QUESTIONS;
-  const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const thread = chatThreadRef.current;
-    if (thread) {
-      thread.scrollTo({
-        top: thread.scrollHeight,
-        behavior,
-      });
+  const remaining = MAX_QUESTIONS - questionCount;
+  const lastMessage = messages.at(-1);
+  const lastAnswer = lastMessage?.role === "assistant" ? getAnswer(lastMessage) : undefined;
+  const followUps = !busy && !error && lastAnswer?.complete
+    ? lastAnswer.answer.followUps.slice(0, 2)
+    : [];
+  const canRetry =
+    !busy &&
+    messages.some((message) => message.role === "user") &&
+    (Boolean(error) ||
+      (lastMessage?.role === "assistant" && !lastAnswer?.complete) ||
+      lastMessage?.role === "user");
+
+  useEffect(() => audioManager.subscribe(setAudioState), []);
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
+  }, [input]);
+  useEffect(() => {
+    if (!busy) inFlight.current = false;
+  }, [busy]);
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!thread) return;
+    if (messages.length === 0) {
+      thread.scrollTo({ top: 0 });
       return;
     }
-    endRef.current?.scrollIntoView({ behavior, block: "end" });
-  }, []);
+    if (!followScroll.current) return;
+    const frame = requestAnimationFrame(() => {
+      thread.scrollTo({ top: thread.scrollHeight, behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, busy, error, followUps.length]);
+  useEffect(
+    () => () => {
+      void stop();
+    },
+    [stop],
+  );
 
   const sendPrompt = useCallback(
-    (promptText: string) => {
-      const trimmed = promptText.trim();
-      if (!trimmed) return;
-      if (questionCount >= MAX_QUESTIONS) return;
-
-      const nextCount = questionCount + 1;
-      setQuestionCount(nextCount);
-      lastUserQuestionRef.current = trimmed;
-      setFollowUps([]);
-      const userId = `user-${Date.now()}`;
-
-      if (nextCount >= MAX_QUESTIONS) {
-        const assistantId = `assistant-${Date.now()}`;
-        setMessages((prev) => [
-          ...prev,
-          { id: userId, role: "user", content: trimmed },
-          { id: assistantId, role: "assistant", content: "Here is how to reach Arthur." },
-        ]);
-        setTreeById((prev) => ({
-          ...prev,
-          [assistantId]: buildContactTree() as any,
-        }));
-        requestAnimationFrame(() => scrollToBottom("smooth"));
-        return;
-      }
-
-      append({ role: "user", content: trimmed, id: userId });
-      requestAnimationFrame(() => scrollToBottom("smooth"));
+    (text: string) => {
+      const value = text.trim();
+      if (
+        !value ||
+        value.length > MAX_INPUT_LENGTH ||
+        !enabled ||
+        busy ||
+        isLocked ||
+        inFlight.current
+      ) return;
+      inFlight.current = true;
+      followScroll.current = true;
+      clearError();
+      setInput("");
+      void sendMessage({ text: value }).finally(() => {
+        inFlight.current = false;
+      });
     },
-    [append, questionCount, scrollToBottom, setMessages],
+    [busy, clearError, enabled, isLocked, sendMessage],
   );
 
-  const handleSend = useCallback(() => {
-    sendPrompt(input);
-    setInput("");
-  }, [input, sendPrompt, setInput]);
-
-  const handleResetChat = useCallback(() => {
+  const reset = async () => {
+    await stop();
+    clearError();
     setMessages([]);
-    setTreeById({});
-    setFollowUps([]);
-    setQuestionCount(0);
     setInput("");
-    lastUserQuestionRef.current = "";
-  }, [setMessages, setInput]);
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend],
-  );
-
-  const promptButtons = useMemo(
-    () =>
-      quickPrompts.map((item, index) => (
-        <button
-          key={item.label}
-          className="starter-prompt"
-          type="button"
-          disabled={isLoading}
-          onClick={() => {
-            sendPrompt(item.prompt);
-            setInput("");
-            if (window.matchMedia("(max-width: 768px)").matches) {
-              requestAnimationFrame(() => scrollToBottom("smooth"));
-            }
-          }}
-        >
-          <span className="starter-index">{String(index + 1).padStart(2, "0")}</span>
-          <span>
-            <strong>{item.label}</strong>
-            <small>{item.detail}</small>
-          </span>
-          <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.75} />
-        </button>
-      )),
-    [sendPrompt, setInput, isLoading, scrollToBottom],
-  );
-
-  const followUpButtons = useMemo(
-    () =>
-      followUps.map((prompt) => (
-        <button
-          key={prompt}
-          className="chip"
-          type="button"
-          disabled={isLoading}
-          onClick={() => {
-            sendPrompt(prompt);
-            setInput("");
-            if (window.matchMedia("(max-width: 768px)").matches) {
-              requestAnimationFrame(() => scrollToBottom("smooth"));
-            }
-          }}
-        >
-          {prompt}
-        </button>
-      )),
-    [followUps, sendPrompt, setInput, isLoading, scrollToBottom],
-  );
-
-  useEffect(() => {
-    setTreeById((prev) => {
-      let next = prev;
-
-      for (const message of messages) {
-        if (message.role !== "assistant" || prev[message.id]) continue;
-        const tree = extractTreeFromMessage(message as AssistantMessageLike, !isLoading);
-        if (!tree) continue;
-        if (next === prev) next = { ...prev };
-        next[message.id] = tree;
-      }
-
-      return next;
+    inFlight.current = false;
+    followScroll.current = true;
+  };
+  const retry = () => {
+    if (busy || inFlight.current || !enabled) return;
+    inFlight.current = true;
+    followScroll.current = true;
+    clearError();
+    void regenerate().finally(() => {
+      inFlight.current = false;
     });
-  }, [messages, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading && lastMessage?.role === 'assistant') {
-       const question = lastUserQuestionRef.current;
-       setFollowUps(getFollowUps(question).slice(0, 2));
-       requestAnimationFrame(() => scrollToBottom("smooth"));
-       window.setTimeout(() => scrollToBottom("smooth"), 80);
-    }
-  }, [isLoading, lastMessage, scrollToBottom]);
-
-  useEffect(() => {
-    if (isLoading) {
-      requestAnimationFrame(() => scrollToBottom("auto"));
-    }
-  }, [messages, isLoading, scrollToBottom]);
-
-  useEffect(() => {
-    if (followUps.length > 0 || isLocked) {
-      requestAnimationFrame(() => scrollToBottom("smooth"));
-    }
-  }, [followUps.length, isLocked, scrollToBottom]);
+  };
 
   return (
     <section className="chat-panel">
@@ -615,80 +256,120 @@ export default function ChatPanel() {
         <header className="conversation-header">
           <h2>Ask Arthur</h2>
           {messages.length > 0 ? (
-            <button className="icon-button" type="button" onClick={handleResetChat} aria-label="Start a new conversation" title="Start over">
+            <button className="icon-button" type="button" onClick={() => void reset()} aria-label="Start a new conversation" title="Start over">
               <RotateCcw size={17} strokeWidth={1.75} />
             </button>
           ) : null}
         </header>
-        <div className="chat-thread" ref={chatThreadRef}>
+        <div
+          className="chat-thread"
+          ref={threadRef}
+          onScroll={() => {
+            const thread = threadRef.current;
+            if (thread) {
+              followScroll.current = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+            }
+          }}
+        >
           {messages.length === 0 ? (
             <div className="chat-welcome">
               <p>Where should we start?</p>
-              <div className="starter-prompts">{promptButtons}</div>
+              <div className="starter-prompts">
+                {quickPrompts.map((item, index) => (
+                  <button
+                    key={item.label}
+                    className="starter-prompt"
+                    type="button"
+                    disabled={busy || !enabled}
+                    onClick={() => sendPrompt(item.prompt)}
+                  >
+                    <span className="starter-index">{String(index + 1).padStart(2, "0")}</span>
+                    <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                    <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.75} />
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
           <JSONUIProvider registry={componentRegistry}>
-            {messages.map((message, index) => (
+            {messages.map((message) => (
               <ChatMessageItem
                 key={message.id}
                 message={message}
-                index={index}
-                tree={treeById[message.id]}
-                isLoading={isLoading}
+                streaming={busy && message.id === lastMessage?.id}
               />
             ))}
-            {isLoading && lastMessage?.role === "user" ? (
+            {busy && lastMessage?.role !== "assistant" ? (
               <div className="chat-message chat-message-assistant">
-                <div className="bubble bubble-assistant">
-                  <ThinkingSkeleton />
-                </div>
+                <div className="bubble bubble-assistant"><ThinkingSkeleton /></div>
               </div>
             ) : null}
             {error ? (
               <div className="chat-error" role="alert">
-                <strong>Response failed</strong>
-                <span>{error.message || "Try again in a moment."}</span>
+                <strong>The answer could not be completed.</strong>
+                <span>{error.message}</span>
               </div>
+            ) : null}
+            {canRetry ? (
+              <button className="chip chat-retry" type="button" disabled={!enabled} onClick={retry}>
+                Retry response
+              </button>
             ) : null}
             {followUps.length > 0 ? (
               <div className="followup-row followup-inline">
                 <p className="followup-label">Try asking</p>
-                <div className="chip-row">{followUpButtons}</div>
+                <div className="chip-row">
+                  {followUps.map((prompt) => (
+                    <button className="chip" key={prompt} type="button" disabled={!enabled || isLocked} onClick={() => sendPrompt(prompt)}>
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
-            {isLocked ? (
+            {isLocked && !busy ? (
               <div className="followup-row followup-inline">
-                <p className="followup-label">
-                  You have reached the question limit. Please reach out directly.
-                </p>
+                <p className="followup-label">You have reached the question limit. Please reach out directly.</p>
               </div>
             ) : null}
-            <div ref={endRef} />
           </JSONUIProvider>
         </div>
 
-        <footer className="chat-input">
+        <form
+          className="chat-input"
+          onSubmit={(event) => {
+            event.preventDefault();
+            sendPrompt(input);
+          }}
+        >
           <label htmlFor="chat-question" className="sr-only">Ask Arthur a question</label>
           <textarea
             id="chat-question"
+            ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask Arthur anything..."
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                sendPrompt(input);
+              }
+            }}
+            placeholder={enabled ? "Ask Arthur anything..." : "Chat is unavailable in this preview"}
             rows={1}
-            disabled={isLoading || isLocked}
-            aria-label="Ask a question about Arthur"
+            maxLength={MAX_INPUT_LENGTH}
+            disabled={isLocked || !enabled}
           />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading || isLocked}
-            aria-label="Send message"
-          >
-            <ArrowUp aria-hidden="true" size={18} strokeWidth={2} />
-          </button>
-          {remainingQuestions <= 5 ? <p className="chat-counter">{remainingQuestions} questions remaining</p> : null}
-        </footer>
+          {busy ? (
+            <button type="button" onClick={() => void stop()} aria-label="Stop response" title="Stop response">
+              <Square aria-hidden="true" size={15} fill="currentColor" />
+            </button>
+          ) : (
+            <button type="submit" disabled={!input.trim() || isLocked || !enabled} aria-label="Send message" title="Send message">
+              <ArrowUp aria-hidden="true" size={18} strokeWidth={2} />
+            </button>
+          )}
+          {remaining <= 5 ? <p className="chat-counter">{remaining} questions remaining</p> : null}
+        </form>
       </div>
     </section>
   );

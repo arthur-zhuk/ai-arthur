@@ -21,9 +21,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Arthur Zhuk | Profile Chat",
+  title: "Arthur Zhuk | Senior Software Engineer",
   description:
-    "Personal profile chat for Arthur Zhuk, powered by json-render and Next.js.",
+    "Arthur Zhuk is a Senior Software Engineer at Anduril. Explore his experience, engineering work, interests, and ways to connect.",
   metadataBase: new URL("https://www.arthurzh.uk"),
 };
 

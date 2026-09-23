@@ -4,11 +4,12 @@ import { useMemo, useState, useCallback, useRef, useEffect, memo, Component, typ
 import { useChat } from "@ai-sdk/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
-import type { Message } from "ai";
-import { buildContactTree, buildIntroTree } from "@/lib/answer";
+import { ArrowUp, ArrowUpRight, Music2, Pause, RotateCcw } from "lucide-react";
+import { buildContactTree } from "@/lib/answer";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
+import { profileData } from "@/lib/profile-data";
 
 const quickPrompts = [
   {
@@ -71,7 +72,12 @@ class RenderErrorBoundary extends Component<{ children: ReactNode; fallback?: Re
 
 function getFollowUps(question: string) {
   const normalized = question.toLowerCase();
-  if (normalized.includes("contact") || normalized.includes("email")) {
+  if (
+    normalized.includes("contact") ||
+    normalized.includes("email") ||
+    normalized.includes("get in touch") ||
+    normalized.includes("reach you")
+  ) {
     return followUpBank.contact;
   }
   if (
@@ -388,34 +394,11 @@ export default function ChatPanel() {
   const chatThreadRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const lastUserQuestionRef = useRef("");
-  const introMessage = useMemo(
-    () => ({ id: "intro", role: "assistant", content: "intro", tree: buildIntroTree() }),
-    [],
-  );
 
   const [audioState, setAudioState] = useState<AudioState>("paused");
 
   useEffect(() => {
     return audioManager.subscribe(setAudioState);
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("question-count", String(questionCount));
-    } catch {
-      // Ignore storage failures in restricted browsing contexts.
-    }
-  }, [questionCount]);
-
-  useEffect(() => {
-    try {
-      const persisted = Number(window.localStorage.getItem("question-count") ?? "0");
-      if (Number.isFinite(persisted) && persisted > 0) {
-        setQuestionCount(Math.min(MAX_QUESTIONS, persisted));
-      }
-    } catch {
-      // Ignore storage failures in restricted browsing contexts.
-    }
   }, []);
 
   const { messages, setMessages, append, isLoading, error } = useChat({
@@ -434,10 +417,6 @@ export default function ChatPanel() {
     if (error) console.error("[Chat] useChat error:", error.message, error);
   }, [error]);
 
-  const combinedMessages = useMemo<Array<Message | typeof introMessage>>(
-    () => [introMessage, ...messages],
-    [introMessage, messages],
-  );
   const lastMessage = messages[messages.length - 1];
   const isLocked = questionCount >= MAX_QUESTIONS;
   const remainingQuestions = Math.max(0, MAX_QUESTIONS - questionCount);
@@ -498,11 +477,6 @@ export default function ChatPanel() {
     setQuestionCount(0);
     setInput("");
     lastUserQuestionRef.current = "";
-    try {
-      window.localStorage.setItem("question-count", "0");
-    } catch {
-      // Ignore storage failures in restricted browsing contexts.
-    }
   }, [setMessages, setInput]);
 
   const handleKeyDown = useCallback(
@@ -517,7 +491,7 @@ export default function ChatPanel() {
 
   const promptButtons = useMemo(
     () =>
-      quickPrompts.map((item) => (
+      quickPrompts.map((item, index) => (
         <button
           key={item.label}
           className="starter-prompt"
@@ -531,14 +505,12 @@ export default function ChatPanel() {
             }
           }}
         >
+          <span className="starter-index">{String(index + 1).padStart(2, "0")}</span>
           <span>
             <strong>{item.label}</strong>
             <small>{item.detail}</small>
           </span>
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" />
-            <path d="m13 6 6 6-6 6" />
-          </svg>
+          <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.75} />
         </button>
       )),
     [sendPrompt, setInput, isLoading, scrollToBottom],
@@ -585,7 +557,7 @@ export default function ChatPanel() {
   useEffect(() => {
     if (!isLoading && lastMessage?.role === 'assistant') {
        const question = lastUserQuestionRef.current;
-       setFollowUps(getFollowUps(question));
+       setFollowUps(getFollowUps(question).slice(0, 2));
        requestAnimationFrame(() => scrollToBottom("smooth"));
        window.setTimeout(() => scrollToBottom("smooth"), 80);
     }
@@ -606,67 +578,57 @@ export default function ChatPanel() {
   return (
     <section className="chat-panel">
       <ChatBackground />
-      <div className="chat-content">
-        <div className="chat-thread" ref={chatThreadRef}>
-          <header className="chat-header">
-            <div className="chat-header-top">
-              <div className="chat-header-text">
-                <p className="eyebrow"><span className="presence-dot" /> Senior Software Engineer at Anduril</p>
-                <h2>Arthur Zhuk</h2>
-                <p className="muted">
-                  I build mission-critical software, care deeply about good systems,
-                  and stay close to the product. Ask me what you are curious about.
-                </p>
-              </div>
-              <div className="chat-header-audio">
-                {audioState === "playing" ? (
-                  <div className="audio-now-playing">
-                    <div className="audio-bars">
-                      <span className="bar"></span>
-                      <span className="bar"></span>
-                      <span className="bar"></span>
-                    </div>
-                    <span className="audio-title">
-                      Arthur of Silver Lake
-                    </span>
-                  </div>
-                ) : null}
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={() => audioManager.toggle()}
-                  aria-label={audioState === "playing" ? "Pause soundtrack" : "Play soundtrack"}
-                  title={audioState === "playing" ? "Pause soundtrack" : "Play Arthur of Silver Lake"}
-                >
-                  {audioState === "playing" ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
-                  )}
-                </button>
-                {messages.length > 0 ? (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={handleResetChat}
-                    aria-label="Start a new conversation"
-                    title="Start over"
-                  >
-                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                      <path d="M3 3v5h5" />
-                    </svg>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            {messages.length === 0 ? (
-              <div className="starter-prompts">{promptButtons}</div>
-            ) : null}
-          </header>
+      <aside className="profile-panel" aria-label="About Arthur">
+        <div className="profile-topline">
+          <p className="eyebrow"><span className="presence-dot" /> Senior Software Engineer at Anduril</p>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => audioManager.toggle()}
+            aria-label={audioState === "playing" ? "Pause soundtrack" : "Play soundtrack"}
+            title={audioState === "playing" ? "Pause Arthur of Silver Lake" : "Play Arthur of Silver Lake"}
+          >
+            {audioState === "playing" ? <Pause size={17} strokeWidth={1.75} /> : <Music2 size={17} strokeWidth={1.75} />}
+          </button>
+        </div>
+        <div className="profile-intro">
+          <p className="profile-greeting">Hi, I&apos;m</p>
+          <h1>Arthur<span className="profile-last-name"> Zhuk<span className="profile-period">.</span></span></h1>
+          <p className="profile-summary">
+            I build software that holds up under real pressure, from backend systems
+            and data to the details people use every day.
+          </p>
+        </div>
+        <div className="profile-bottom">
+          <p className="profile-experience"><strong>10+ years</strong> across defense technology, healthcare, enterprise software, and more.</p>
+          <nav className="profile-links" aria-label="Arthur's links">
+            <a href="/arthur-zhuk-resume.pdf" target="_blank" rel="noreferrer">Resume <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
+            <a href={`mailto:${profileData.contact.email}`}>Email <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
+            <a href={profileData.contact.github} target="_blank" rel="noreferrer">GitHub <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
+            <a href={profileData.contact.linkedin} target="_blank" rel="noreferrer">LinkedIn <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
+          </nav>
+          {audioState === "playing" ? <p className="audio-now-playing"><span className="audio-bars"><span className="bar" /><span className="bar" /><span className="bar" /></span> Arthur of Silver Lake</p> : null}
+        </div>
+      </aside>
 
+      <div className="conversation-panel">
+        <header className="conversation-header">
+          <h2>Ask Arthur</h2>
+          {messages.length > 0 ? (
+            <button className="icon-button" type="button" onClick={handleResetChat} aria-label="Start a new conversation" title="Start over">
+              <RotateCcw size={17} strokeWidth={1.75} />
+            </button>
+          ) : null}
+        </header>
+        <div className="chat-thread" ref={chatThreadRef}>
+          {messages.length === 0 ? (
+            <div className="chat-welcome">
+              <p>Where should we start?</p>
+              <div className="starter-prompts">{promptButtons}</div>
+            </div>
+          ) : null}
           <JSONUIProvider registry={componentRegistry}>
-            {combinedMessages.map((message, index) => (
+            {messages.map((message, index) => (
               <ChatMessageItem
                 key={message.id}
                 message={message}
@@ -706,17 +668,13 @@ export default function ChatPanel() {
         </div>
 
         <footer className="chat-input">
-          <div className="chat-input-meta">
-            <p className="chat-hint">Ask me anything</p>
-            {remainingQuestions <= 5 ? (
-              <p className="chat-counter">{remainingQuestions} questions remaining</p>
-            ) : null}
-          </div>
+          <label htmlFor="chat-question" className="sr-only">Ask Arthur a question</label>
           <textarea
+            id="chat-question"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about experience, skills, or projects..."
+            placeholder="Ask Arthur anything..."
             rows={1}
             disabled={isLoading || isLocked}
             aria-label="Ask a question about Arthur"
@@ -727,11 +685,9 @@ export default function ChatPanel() {
             disabled={!input.trim() || isLoading || isLocked}
             aria-label="Send message"
           >
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m5 12 7-7 7 7" />
-              <path d="M12 19V5" />
-            </svg>
+            <ArrowUp aria-hidden="true" size={18} strokeWidth={2} />
           </button>
+          {remainingQuestions <= 5 ? <p className="chat-counter">{remainingQuestions} questions remaining</p> : null}
         </footer>
       </div>
     </section>

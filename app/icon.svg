@@ -1,5 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="26" fill="#131412" />
-  <text x="18" y="84" font-family="Helvetica, Arial, sans-serif" font-size="66" font-weight="700" letter-spacing="-4" fill="#f1f0e9">az</text>
-  <path d="M100 26 L104 42 L120 46 L104 50 L100 66 L96 50 L80 46 L96 42 Z" fill="#e9be74" />
+  <defs>
+    <radialGradient id="bg" cx="28%" cy="14%" r="105%">
+      <stop offset="0" stop-color="#34352b"/>
+      <stop offset="0.55" stop-color="#171814"/>
+      <stop offset="1" stop-color="#0b0c0a"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d69a45"/>
+      <stop offset="0.55" stop-color="#f6d493"/>
+      <stop offset="1" stop-color="#ffe9b8"/>
+    </linearGradient>
+    <linearGradient id="letter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dcd9cb"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="58%" r="50%">
+      <stop offset="0" stop-color="#e9be74" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#e9be74" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  
+  <rect x="1.5" y="1.5" width="125" height="125" rx="28.5" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="3"/>
+  <g transform="rotate(-20 64 76)" fill="none" stroke="url(#ring)" stroke-width="11" stroke-linecap="round">
+    <path d="M9 76 A55 20 0 0 1 119 76" stroke-opacity="0.5"/>
+  </g>
+  <path d="M28 112 L64 19 L100 112" fill="none" stroke="url(#letter)" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+  <g transform="rotate(-20 64 76)" fill="none" stroke="url(#ring)" stroke-width="11" stroke-linecap="round">
+    <path d="M9 76 A55 20 0 0 0 119 76"/>
+  </g>
+  <path d="M103 15 L107 30 L122 34 L107 38 L103 53 L99 38 L84 34 L99 30 Z" fill="#ffd98f"/>
 </svg>

@@ -78,7 +78,7 @@ The case studies restate figures that already appear in the role list. Add first
 
 Styles: `app/globals.css` (tokens and chat components), `app/portfolio.css` (the page), `app/chat.css` (the dialog and the chat inside it). The particle illustration respects reduced motion and pauses rendering when offscreen or in a hidden tab. One shared audio player (`lib/audio-manager.ts`) drives both the page's soundtrack control and the chat's visualizer, and the file is not requested until someone presses play.
 
-Sharing and search: `app/opengraph-image.tsx` (link-preview card), `app/icon.svg` and `app/icon.tsx` (favicon), `app/robots.ts`, `app/sitemap.ts`, and `Person` JSON-LD in `app/page.tsx`.
+Sharing and search: `app/opengraph-image.tsx` (link-preview card), `app/icon.svg` (the favicon; `app/apple-icon.tsx` renders the same file for iOS), `app/favicon.ico` (fallback for browsers without SVG favicons), `app/robots.ts`, `app/sitemap.ts`, and `Person` JSON-LD in `app/page.tsx`.
 
 ## Private design preview
 

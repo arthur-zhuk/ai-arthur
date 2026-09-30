@@ -32,7 +32,14 @@ await cp(
   resolve(root, ".next/server/app/icon.svg.body"),
   resolve(output, "icon.svg"),
 );
-await cp(resolve(root, ".next/server/app/icon.body"), resolve(output, "icon"));
+await cp(
+  resolve(root, ".next/server/app/apple-icon.body"),
+  resolve(output, "apple-icon"),
+);
+await cp(
+  resolve(root, ".next/server/app/favicon.ico.body"),
+  resolve(output, "favicon.ico"),
+);
 // Link previews and crawlers: the share image, robots.txt, and sitemap.xml.
 await cp(
   resolve(root, ".next/server/app/opengraph-image.body"),

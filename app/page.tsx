@@ -1,11 +1,28 @@
-import ChatPanel from "@/components/chat-panel";
+import PersonalPage from "@/components/personal-page";
+import { profileData } from "@/lib/profile-data";
+
+const person = {
+  "@context": "https://schema.org",
+  "@type": "Person",
+  name: profileData.name,
+  jobTitle: profileData.title,
+  url: profileData.contact.site,
+  worksFor: { "@type": "Organization", name: profileData.experience[0].company },
+  sameAs: [profileData.contact.github, profileData.contact.linkedin],
+  knowsAbout: profileData.skills,
+};
 
 export default function HomePage() {
   return (
-    <main className="page">
-      <div className="page-center">
-        <ChatPanel enabled={process.env.SITES_STATIC_PREVIEW !== "1"} />
-      </div>
-    </main>
+    <>
+      <script
+        type="application/ld+json"
+        // "<" is escaped so profile text can never close the script tag.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(person).replace(/</g, "\\u003c"),
+        }}
+      />
+      <PersonalPage chatReady={process.env.SITES_STATIC_PREVIEW !== "1"} />
+    </>
   );
 }

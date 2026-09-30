@@ -17,6 +17,77 @@ export const profileData = {
     "Performance budgets and release quality ownership",
     "AI-assisted engineering workflows"
   ],
+  impact: [
+    {
+      figure: "3",
+      unit: "×",
+      label: "Faster release cadence",
+      source: "Travel Syndicate Technology",
+    },
+    {
+      figure: "55",
+      unit: "%",
+      label: "Fewer slow queries",
+      source: "Insight Rx · MongoDB modernization",
+    },
+    {
+      figure: "10k",
+      unit: "+",
+      label: "Users of products I helped build",
+      source: "Procore · Quality & Safety",
+    },
+  ],
+  // Every figure below restates a number already listed under `experience`.
+  caseStudies: [
+    {
+      id: "mongodb-upgrade",
+      company: "Insight Rx",
+      title: "Upgrading MongoDB across four major versions",
+      challenge:
+        "A healthcare precision-dosing platform was running on an aging MongoDB, a ten-year-old AngularJS frontend, and untyped JavaScript.",
+      approach:
+        "Executed the MongoDB upgrade across four major versions, then modernized the surrounding stack: JavaScript to TypeScript, and AngularJS to React.",
+      outcomes: [
+        { figure: "55%", label: "fewer slow queries" },
+        { figure: "~180", label: "fewer Sentry errors per month" },
+        { figure: "35%", label: "fewer P0/P1 incidents" },
+        { figure: "12 → 4", label: "days of cycle time" },
+      ],
+      skills: ["MongoDB", "TypeScript", "React", "Node.js"],
+    },
+    {
+      id: "unified-react",
+      company: "Travel Syndicate Technology",
+      title: "One React architecture for Hotel, Itinerary, and Manual Booking",
+      challenge:
+        "Legacy Ember and React code lived side by side across 6 repos and 10 engineers, with duplicated logic, weekly releases, and slow incident mitigation.",
+      approach:
+        "Migrated to a single React architecture, gated releases on E2E checks, improved alerting, and added PostHog analytics to see how the product was used.",
+      outcomes: [
+        { figure: "30%", label: "less duplicated logic across 80 modules" },
+        { figure: "35%", label: "fewer production regressions" },
+        { figure: "1× → 3×", label: "releases per week" },
+        { figure: "45 → 15", label: "minutes to mitigate incidents" },
+      ],
+      skills: ["React", "TypeScript", "PostHog", "E2E Testing"],
+    },
+    {
+      id: "micro-frontends",
+      company: "Procore",
+      title: "Letting teams ship in parallel on a Rails monolith",
+      challenge:
+        "The Quality and Safety suite was built into a Rails monolith, with a slow Webpack pipeline and JavaScript that shipped runtime bugs.",
+      approach:
+        "Decoupled the monolith into micro-frontends for parallel development, tuned the Webpack pipeline, and shipped Action Plans as the first TypeScript product.",
+      outcomes: [
+        { figure: "20 → 5", label: "minutes of CI build time" },
+        { figure: "40%", label: "fewer runtime bugs in Action Plans" },
+        { figure: "25", label: "major features across six products" },
+        { figure: "500+", label: "companies using them" },
+      ],
+      skills: ["Ruby on Rails", "React", "TypeScript", "Webpack"],
+    },
+  ],
   experience: [
     {
       company: "Anduril",
@@ -174,7 +245,9 @@ export const profileData = {
     email: "arthurzhuk@gmail.com",
     linkedin: "https://www.linkedin.com/in/arthurzhuk",
     github: "https://github.com/arthur-zhuk",
-    site: "https://www.arthurzh.uk"
+    site: "https://www.arthurzh.uk",
+    // Optional scheduling link (Cal.com, Calendly, ...). Left unset, the site simply omits "Book a call".
+    booking: process.env.NEXT_PUBLIC_BOOKING_URL?.trim() || undefined
   },
   aiTools: ["Cursor", "Claude Code", "Wispr Flow"],
   interests: [

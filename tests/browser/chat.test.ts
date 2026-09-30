@@ -88,6 +88,7 @@ test(
           .catch(() => {});
       });
       await page.goto(url);
+      await page.locator(".header-chat").click();
       const input = page.getByRole("textbox", {
         name: "Ask Arthur a question",
       });
@@ -167,10 +168,97 @@ test(
       if (process.env.CHAT_SCREENSHOT_PATH)
         await page.screenshot({ path: process.env.CHAT_SCREENSHOT_PATH });
       await page.goto(new URL("/portfolio", url).toString());
-      await page.getByRole("button", { name: /Ask AI Arthur/ }).waitFor();
+      await page.locator(".header-chat").waitFor();
+      assert.equal(new URL(page.url()).pathname, "/");
+      assert.equal(await page.locator("h1").count(), 1);
       assert.deepEqual(pageErrors, []);
     } finally {
       release();
+      await browser.close();
+    }
+  },
+);
+
+test(
+  "hero question opens the dialog and is sent once; job-fit starter composes without sending",
+  { timeout: 60_000 },
+  async () => {
+    const browser = await chromium.launch({
+      executablePath:
+        process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ??
+        (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined),
+    });
+    const page = await browser.newPage({
+      viewport: { width: 1280, height: 900 },
+    });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    const sent: string[] = [];
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          initialDelayInMs: 0,
+          chunkDelayInMs: 0,
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "text" },
+            { type: "text-delta", id: "text", delta: JSON.stringify(answer) },
+            { type: "text-end", id: "text" },
+            {
+              type: "finish",
+              finishReason: { unified: "stop", raw: "stop" },
+              usage: {
+                inputTokens: {
+                  total: 100,
+                  noCache: 100,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                },
+                outputTokens: { total: 100, text: 100, reasoning: 0 },
+              },
+            },
+          ],
+        }),
+      }),
+    });
+    const handler = createChatHandler({ model, hasApiKey: () => true });
+    try {
+      await page.route("**/api/generate", async (route) => {
+        const body = route.request().postDataJSON();
+        sent.push(body.messages.at(-1).parts[0].text);
+        const response = await handler(
+          new Request("http://test.local/api/generate", {
+            method: "POST",
+            body: JSON.stringify(body),
+          }),
+        );
+        await route
+          .fulfill({
+            status: response.status,
+            headers: Object.fromEntries(response.headers),
+            body: await response.text(),
+          })
+          .catch(() => {});
+      });
+      await page.goto(url);
+      assert.equal(await page.evaluate(() => document.querySelector("dialog")?.open), false);
+      await page.getByRole("textbox", { name: "Ask AI Arthur a question" }).fill("What did Arthur do at Insight Rx?");
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      await page.locator(".bubble-assistant").getByText(/55%/).waitFor();
+      assert.equal(await page.evaluate(() => document.querySelector("dialog")?.open), true);
+      assert.deepEqual(sent, ["What did Arthur do at Insight Rx?"]);
+      await page
+        .getByRole("button", { name: "Start a new conversation", exact: true })
+        .click();
+      await page.getByRole("button", { name: /Match me to a role/ }).click();
+      const input = page.getByRole("textbox", { name: "Ask Arthur a question" });
+      assert.match(await input.inputValue(), /^Here is a job description/);
+      assert.equal(sent.length, 1, "Composing a job-fit question must not send anything");
+      await page.keyboard.press("Escape");
+      assert.equal(await page.evaluate(() => document.querySelector("dialog")?.open), false);
+      assert.equal(await page.evaluate(() => document.body.style.overflow), "");
+      assert.deepEqual(pageErrors, []);
+    } finally {
       await browser.close();
     }
   },

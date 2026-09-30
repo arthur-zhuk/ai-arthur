@@ -5,14 +5,34 @@ import { createTree, node } from "../tree";
 
 export const MAX_QUESTIONS = 30;
 export const MAX_INPUT_LENGTH = 4000;
-export const profileLinks = {
+type LinkKey = "email" | "linkedin" | "github" | "website" | "resume" | "booking";
+type ProfileLink = { label: string; href: string };
+// Destinations are owned by the app. `booking` exists only when a scheduling URL is configured.
+export const profileLinks: Record<LinkKey, ProfileLink | undefined> = {
   email: { label: "Email Arthur", href: `mailto:${profileData.contact.email}` },
   linkedin: { label: "LinkedIn", href: profileData.contact.linkedin },
   github: { label: "GitHub", href: profileData.contact.github },
   website: { label: "Personal website", href: profileData.contact.site },
   resume: { label: "Open résumé", href: "/arthur-zhuk-resume.pdf" },
-} as const;
-const linkSchema = z.enum(["email", "linkedin", "github", "website", "resume"]);
+  booking: profileData.contact.booking
+    ? { label: "Book a call", href: profileData.contact.booking }
+    : undefined,
+};
+export const bookingAvailable = Boolean(profileLinks.booking);
+const linkSchema = z.enum([
+  "email",
+  "linkedin",
+  "github",
+  "website",
+  "resume",
+  "booking",
+]);
+function resolvedLinks(links: readonly LinkKey[] = []): ProfileLink[] {
+  return [...new Set(links)].flatMap((key) => {
+    const link = profileLinks[key];
+    return link ? [link] : [];
+  });
+}
 const sectionSchema = z.object({
   heading: z.string().max(160),
   body: z.string().max(2000),
@@ -24,7 +44,7 @@ export const answerSchema = z.object({
   sections: z.array(sectionSchema).max(4),
   skills: z.array(z.string().max(80)).max(12),
   interests: z.array(z.string().max(160)).max(8),
-  links: z.array(linkSchema).max(5),
+  links: z.array(linkSchema).max(6),
   showResume: z.boolean(),
   followUps: z.array(z.string().max(160)).max(3),
 });
@@ -60,9 +80,7 @@ export function answerText(answer: PartialAnswer): string {
     ]),
     ...(answer.skills ?? []),
     ...(answer.interests ?? []),
-    ...(answer.links ?? []).map(
-      (link) => `${profileLinks[link].label}: ${profileLinks[link].href}`,
-    ),
+    ...resolvedLinks(answer.links).map((link) => `${link.label}: ${link.href}`),
     answer.showResume ? "Résumé: /arthur-zhuk-resume.pdf" : "",
   ]
     .filter(Boolean)
@@ -97,16 +115,14 @@ export function answerTree(answer: PartialAnswer) {
     children.push(
       node("InterestGrid", { title: "Beyond work", items: answer.interests }),
     );
-  if (answer.links?.length)
+  const links = resolvedLinks(answer.links);
+  if (links.length)
     children.push(
       node(
         "List",
         {},
-        [...new Set(answer.links)].map((link) =>
-          node("ListItem", {
-            content: profileLinks[link].label,
-            href: profileLinks[link].href,
-          }),
+        links.map((link) =>
+          node("ListItem", { content: link.label, href: link.href }),
         ),
       ),
     );
@@ -114,7 +130,7 @@ export function answerTree(answer: PartialAnswer) {
     children.push(
       node("Resume", {
         title: "Arthur Zhuk résumé",
-        href: profileLinks.resume.href,
+        href: "/arthur-zhuk-resume.pdf",
       }),
     );
   return createTree(node("Card", { title: answer.title }, children));

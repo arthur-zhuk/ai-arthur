@@ -13,7 +13,7 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { ArrowUp, ArrowUpRight, Music2, Pause, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, ArrowUpRight, ClipboardPaste, Music2, Pause, RotateCcw, Square } from "lucide-react";
 import ChatBackground from "@/components/chat-background";
 import { componentRegistry } from "@/components/json-components";
 import { audioManager, type AudioState } from "@/lib/audio-manager";
@@ -24,13 +24,15 @@ import {
   getMessageText,
   MAX_INPUT_LENGTH,
   MAX_QUESTIONS,
+  profileLinks,
   type ProfileMessage,
 } from "@/lib/chat/schema";
-import { profileData } from "@/lib/profile-data";
 
 const transport = new DefaultChatTransport<ProfileMessage>({ api: "/api/generate" });
 const dataPartSchemas = { answer: answerDataSchema };
-const quickPrompts = [
+const JOB_FIT_PREFIX =
+  "Here is a job description. How well does Arthur fit, and where are the gaps?\n\n";
+const quickPrompts: { label: string; detail: string; prompt: string; compose?: boolean }[] = [
   {
     label: "Current work",
     detail: "Anduril and recent roles",
@@ -50,6 +52,12 @@ const quickPrompts = [
     label: "Beyond work",
     detail: "Interests, tools, and contact",
     prompt: "What should I know about Arthur beyond work, including his interests and how to get in touch?",
+  },
+  {
+    label: "Match me to a role",
+    detail: "Paste a job description, get an honest fit",
+    prompt: JOB_FIT_PREFIX,
+    compose: true,
   },
 ];
 
@@ -113,13 +121,23 @@ const ChatMessageItem = memo(function ChatMessageItem({
   );
 });
 
-export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
+export type PendingPrompt = { id: number; text: string };
+
+export default function ChatPanel({
+  enabled = true,
+  pendingPrompt = null,
+}: {
+  enabled?: boolean;
+  /** A question typed elsewhere on the page. It is sent once, as soon as the panel is ready. */
+  pendingPrompt?: PendingPrompt | null;
+}) {
   const [input, setInput] = useState("");
   const [audioState, setAudioState] = useState<AudioState>("paused");
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const followScroll = useRef(true);
   const inFlight = useRef(false);
+  const sentPrompt = useRef<number | null>(null);
   const {
     messages,
     setMessages,
@@ -198,6 +216,26 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
     [busy, clearError, enabled, isLocked, sendMessage],
   );
 
+  // Deferred so React Strict Mode's throwaway mount cannot abort the request it just started.
+  useEffect(() => {
+    if (!pendingPrompt || sentPrompt.current === pendingPrompt.id || !enabled) return;
+    const timer = setTimeout(() => {
+      sentPrompt.current = pendingPrompt.id;
+      sendPrompt(pendingPrompt.text);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [pendingPrompt, enabled, sendPrompt]);
+
+  const composeJobFit = () => {
+    setInput(JOB_FIT_PREFIX);
+    requestAnimationFrame(() => {
+      const textarea = inputRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(JOB_FIT_PREFIX.length, JOB_FIT_PREFIX.length);
+    });
+  };
+
   const reset = async () => {
     await stop();
     clearError();
@@ -217,49 +255,29 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
   };
 
   return (
-    <section className="chat-panel">
+    <section className="chat-panel" aria-label="Chat with AI Arthur">
       <ChatBackground />
-      <aside className="profile-panel" aria-label="About Arthur">
-        <div className="profile-topline">
-          <p className="eyebrow"><span className="presence-dot" /> Senior Software Engineer at Anduril</p>
-          <button
-            className="icon-button"
-            type="button"
-            onClick={() => audioManager.toggle()}
-            aria-label={audioState === "playing" ? "Pause soundtrack" : "Play soundtrack"}
-            title={audioState === "playing" ? "Pause Arthur of Silver Lake" : "Play Arthur of Silver Lake"}
-          >
-            {audioState === "playing" ? <Pause size={17} strokeWidth={1.75} /> : <Music2 size={17} strokeWidth={1.75} />}
-          </button>
-        </div>
-        <div className="profile-intro">
-          <p className="profile-greeting">Hi, I&apos;m</p>
-          <h1>Arthur<span className="profile-last-name"> Zhuk<span className="profile-period">.</span></span></h1>
-          <p className="profile-summary">
-            I build software that holds up under real pressure, from backend systems
-            and data to the details people use every day.
-          </p>
-        </div>
-        <div className="profile-bottom">
-          <p className="profile-experience"><strong>10+ years</strong> across defense technology, healthcare, enterprise software, and more.</p>
-          <nav className="profile-links" aria-label="Arthur's links">
-            <a href="/arthur-zhuk-resume.pdf" target="_blank" rel="noreferrer">Resume <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
-            <a href={`mailto:${profileData.contact.email}`}>Email <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
-            <a href={profileData.contact.github} target="_blank" rel="noreferrer">GitHub <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
-            <a href={profileData.contact.linkedin} target="_blank" rel="noreferrer">LinkedIn <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.75} /></a>
-          </nav>
-          {audioState === "playing" ? <p className="audio-now-playing"><span className="audio-bars"><span className="bar" /><span className="bar" /><span className="bar" /></span> Arthur of Silver Lake</p> : null}
-        </div>
-      </aside>
-
       <div className="conversation-panel">
         <header className="conversation-header">
-          <h2>Ask Arthur</h2>
-          {messages.length > 0 ? (
-            <button className="icon-button" type="button" onClick={() => void reset()} aria-label="Start a new conversation" title="Start over">
-              <RotateCcw size={17} strokeWidth={1.75} />
+          <p className="eyebrow">
+            <span className="presence-dot" /> AI guide · answers come from Arthur&apos;s profile
+          </p>
+          <div className="conversation-actions">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => void audioManager.toggle()}
+              aria-label={audioState === "playing" ? "Pause soundtrack" : "Play soundtrack"}
+              title={audioState === "playing" ? "Pause Arthur of Silver Lake" : "Play Arthur of Silver Lake"}
+            >
+              {audioState === "playing" ? <Pause size={17} strokeWidth={1.75} /> : <Music2 size={17} strokeWidth={1.75} />}
             </button>
-          ) : null}
+            {messages.length > 0 ? (
+              <button className="icon-button" type="button" onClick={() => void reset()} aria-label="Start a new conversation" title="Start over">
+                <RotateCcw size={17} strokeWidth={1.75} />
+              </button>
+            ) : null}
+          </div>
         </header>
         <div
           className="chat-thread"
@@ -281,14 +299,25 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
                     className="starter-prompt"
                     type="button"
                     disabled={busy || !enabled}
-                    onClick={() => sendPrompt(item.prompt)}
+                    onClick={() => (item.compose ? composeJobFit() : sendPrompt(item.prompt))}
                   >
                     <span className="starter-index">{String(index + 1).padStart(2, "0")}</span>
                     <span><strong>{item.label}</strong><small>{item.detail}</small></span>
-                    <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.75} />
+                    {item.compose ? (
+                      <ClipboardPaste aria-hidden="true" size={17} strokeWidth={1.75} />
+                    ) : (
+                      <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.75} />
+                    )}
                   </button>
                 ))}
               </div>
+              <nav className="welcome-links" aria-label="Contact Arthur directly">
+                <a href={profileLinks.resume!.href} target="_blank" rel="noreferrer">Résumé</a>
+                <a href={profileLinks.email!.href}>Email</a>
+                {profileLinks.booking ? (
+                  <a href={profileLinks.booking.href} target="_blank" rel="noreferrer">Book a call</a>
+                ) : null}
+              </nav>
             </div>
           ) : null}
           <JSONUIProvider registry={componentRegistry}>
@@ -369,7 +398,15 @@ export default function ChatPanel({ enabled = true }: { enabled?: boolean }) {
             </button>
           )}
           {remaining <= 5 ? <p className="chat-counter">{remaining} questions remaining</p> : null}
+          {input.length >= MAX_INPUT_LENGTH - 500 ? (
+            <p className="chat-counter chat-length" role="status">
+              {input.length.toLocaleString()} / {MAX_INPUT_LENGTH.toLocaleString()} characters
+            </p>
+          ) : null}
         </form>
+        <p className="chat-disclosure">
+          AI Arthur is an AI guide, not Arthur. It answers from his public profile and can be wrong.
+        </p>
       </div>
     </section>
   );

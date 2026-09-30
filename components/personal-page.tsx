@@ -1,28 +1,56 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowUp, Bike, Cpu, Trophy } from "lucide-react";
 import { profileData } from "@/lib/profile-data";
+import {
+  heroQuestions,
+  howItWorks,
+  interestCards,
+  stack,
+  type InterestCard,
+} from "@/lib/site-content";
+import { audioManager } from "@/lib/audio-manager";
 import OrbitArt from "@/components/orbit-art";
+import type { PendingPrompt } from "@/components/chat-panel";
+
 const ChatPanel = dynamic(() => import("@/components/chat-panel"), {
   loading: () => <p className="chat-loading">Opening the conversation…</p>,
 });
 
+const interestIcons: Record<InterestCard["icon"], typeof Bike> = {
+  bike: Bike,
+  cpu: Cpu,
+  trophy: Trophy,
+};
+const current = profileData.experience[0];
+const { booking, email } = profileData.contact;
+
 export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [chatOpened, setChatOpened] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+  const [question, setQuestion] = useState("");
   const [allRoles, setAllRoles] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [audioError, setAudioError] = useState(false);
-  const audio = useRef<HTMLAudioElement>(null);
-  const openChat = () => {
+
+  const openChat = (prompt?: string) => {
     setChatOpened(true);
-    dialog.current?.showModal();
-    document.body.style.overflow = "hidden";
+    if (prompt) setPendingPrompt({ id: Date.now(), text: prompt });
+    if (!dialog.current?.open) {
+      dialog.current?.showModal();
+      document.body.style.overflow = "hidden";
+    }
   };
-  const closeChat = () => {
-    dialog.current?.close();
-    document.body.style.overflow = "";
+  const closeChat = () => dialog.current?.close();
+  const askFromHero = (event: FormEvent) => {
+    event.preventDefault();
+    const value = question.trim();
+    if (!value) return;
+    setQuestion("");
+    openChat(value);
   };
   useEffect(
     () => () => {
@@ -30,18 +58,12 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
     },
     [],
   );
-  const toggleAudio = async () => {
-    if (!audio.current) return;
-    if (playing) audio.current.pause();
-    else {
-      try {
-        await audio.current.play();
-        setAudioError(false);
-      } catch {
-        setAudioError(true);
-      }
-    }
-  };
+  useEffect(
+    () => audioManager.subscribe((state) => setPlaying(state === "playing")),
+    [],
+  );
+  const toggleAudio = async () => setAudioError(!(await audioManager.toggle()));
+
   return (
     <div className="portfolio">
       <a className="skip-link" href="#main">
@@ -53,12 +75,13 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
         </a>
         <nav aria-label="Main navigation">
           <a href="#work">Experience</a>
+          <a href="#build">How this works</a>
           <a href="#about">Off the clock</a>
-          <a href={`mailto:${profileData.contact.email}`}>
-            Let’s talk <span>↗</span>
+          <a href={booking ?? `mailto:${email}`}>
+            {booking ? "Book a call" : "Let’s talk"} <span>↗</span>
           </a>
         </nav>
-        <button className="header-chat" onClick={openChat}>
+        <button className="header-chat" onClick={() => openChat()}>
           <span className="sparkle">✷</span> Ask AI Arthur <span>↗</span>
         </button>
       </header>
@@ -66,7 +89,8 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-topline">
             <span className="overline">
-              <i className="status-dot" /> ENGINEER. BUILDER. ALWAYS CURIOUS.
+              <i className="status-dot" /> {profileData.title.toUpperCase()} ·{" "}
+              {current.company.toUpperCase()}
             </span>
             <span className="edition">PERSONAL SPACE / 2026</span>
           </div>
@@ -85,8 +109,10 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
                 <span>Human experiences.</span>
               </p>
               <p className="hero-description">
-                I build software that makes complexity feel simple. From the
-                interfaces people touch to the systems they depend on.
+                I build software that holds up under real pressure. Lately
+                that has meant upgrading MongoDB across four major versions,
+                merging two frontends into one architecture, and taking a team
+                from weekly releases to three a week.
               </p>
               <div className="hero-actions">
                 <a className="primary-link" href="#work">
@@ -101,13 +127,43 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
                   View résumé ↗
                 </a>
               </div>
+              <form className="hero-ask" onSubmit={askFromHero}>
+                <label className="sr-only" htmlFor="hero-question">
+                  Ask AI Arthur a question
+                </label>
+                <span className="sparkle" aria-hidden="true">
+                  ✷
+                </span>
+                <input
+                  id="hero-question"
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="Ask AI Arthur anything…"
+                  maxLength={500}
+                  autoComplete="off"
+                />
+                <button
+                  type="submit"
+                  aria-label="Ask"
+                  disabled={!question.trim()}
+                >
+                  <ArrowUp aria-hidden="true" size={17} strokeWidth={2} />
+                </button>
+              </form>
+              <div className="hero-suggestions" aria-label="Suggested questions">
+                {heroQuestions.map((text) => (
+                  <button key={text} type="button" onClick={() => openChat(text)}>
+                    {text}
+                  </button>
+                ))}
+              </div>
             </div>
             <OrbitArt />
           </div>
           <div className="hero-footer">
             <p>
               <span className="status-dot" /> Currently building at{" "}
-              <strong>Anduril</strong>
+              <strong>{current.company}</strong>
             </p>
             <span>BACKEND DEPTH. FRONTEND INSTINCT.</span>
             <a href="#work" aria-label="Scroll to experience">
@@ -122,11 +178,11 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
             <h2>Ask a better question.</h2>
           </div>
           <p className="conversation-description">
-            Explore my experience, how I build,
+            Explore my experience and how I build, or
             <br />
-            or what I’m into outside of work.
+            paste a job description and get an honest fit.
           </p>
-          <button onClick={openChat}>
+          <button onClick={() => openChat()}>
             Meet AI Arthur <span>↗</span>
           </button>
         </section>
@@ -148,25 +204,49 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
             </p>
           </div>
           <div className="impact-grid">
-            <div>
-              <span className="impact-number">3×</span>
-              <p>Faster release cadence</p>
-              <small>Travel Syndicate Technology</small>
-            </div>
-            <div>
-              <span className="impact-number">
-                55<span>%</span>
-              </span>
-              <p>Fewer slow queries</p>
-              <small>Insight Rx · MongoDB modernization</small>
-            </div>
-            <div>
-              <span className="impact-number">
-                10k<span>+</span>
-              </span>
-              <p>Users of products I helped build</p>
-              <small>Procore · Quality & Safety</small>
-            </div>
+            {profileData.impact.map((item) => (
+              <div key={item.label}>
+                <span className="impact-number">
+                  {item.figure}
+                  <span>{item.unit}</span>
+                </span>
+                <p>{item.label}</p>
+                <small>{item.source}</small>
+              </div>
+            ))}
+          </div>
+          <div className="experience-title">
+            <span className="overline">CASE STUDIES</span>
+            <span>THE PROBLEM. THE WORK. THE RESULT.</span>
+          </div>
+          <div className="case-list">
+            {profileData.caseStudies.map((study, index) => (
+              <article key={study.id} className="case">
+                <div className="case-intro">
+                  <span className="role-index">0{index + 1}</span>
+                  <span className="case-company">{study.company}</span>
+                  <h3>{study.title}</h3>
+                </div>
+                <dl className="case-story">
+                  <div>
+                    <dt>The problem</dt>
+                    <dd>{study.challenge}</dd>
+                  </div>
+                  <div>
+                    <dt>What I did</dt>
+                    <dd>{study.approach}</dd>
+                  </div>
+                </dl>
+                <ul className="case-outcomes" aria-label="Results">
+                  {study.outcomes.map((outcome) => (
+                    <li key={outcome.label}>
+                      <strong>{outcome.figure}</strong>
+                      <span>{outcome.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
           </div>
           <div className="experience-title">
             <span className="overline">SELECTED EXPERIENCE</span>
@@ -217,12 +297,53 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
           </button>
         </section>
         <section
+          className="build-section section-wrap"
+          id="build"
+          aria-labelledby="build-title"
+        >
+          <div className="section-heading">
+            <span className="overline">02 / THE BUILD</span>
+            <h2 id="build-title">
+              This site is
+              <br />
+              <span>a project too.</span>
+            </h2>
+            <p>
+              Ask AI Arthur something hard. Here is what keeps its answers
+              honest.
+            </p>
+          </div>
+          <ol className="build-grid">
+            {howItWorks.map((item, index) => (
+              <li key={item.title}>
+                <span className="role-index">0{index + 1}</span>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="stack-row">
+            <ul aria-label="Technology used to build this site">
+              {stack.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <a
+              href={profileData.contact.github}
+              target="_blank"
+              rel="noreferrer"
+            >
+              More on GitHub ↗
+            </a>
+          </div>
+        </section>
+        <section
           className="about-section section-wrap"
           id="about"
           aria-labelledby="about-title"
         >
           <div className="about-copy">
-            <span className="overline">02 / THE PERSON</span>
+            <span className="overline">03 / THE PERSON</span>
             <h2 id="about-title">
               There’s more
               <br />
@@ -245,7 +366,7 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
                 {playing ? "Ⅱ" : "▶"}
               </button>
               <div>
-                <span>
+                <span role="status">
                   {audioError
                     ? "Playback unavailable. Try again."
                     : playing
@@ -267,51 +388,42 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
                   />
                 ))}
               </div>
-              <audio
-                ref={audio}
-                src="/suno-song.mp3"
-                preload="none"
-                onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
-                onEnded={() => setPlaying(false)}
-              />
             </div>
           </div>
           <div className="interest-board">
-            <div className="interest-card riding">
-              <span className="interest-number">01</span>
-              <span className="road-mark" aria-hidden="true">
-                ↗
-              </span>
-              <div>
-                <h3>The long way home.</h3>
-                <p>Road biking & getting outside</p>
-              </div>
-            </div>
-            <div className="interest-card">
-              <span className="interest-number">02</span>
-              <span className="interest-icon" aria-hidden="true">
-                ⌘
-              </span>
-              <div>
-                <h3>One more experiment.</h3>
-                <p>AI, blockchain & side projects</p>
-              </div>
-            </div>
-            <div className="interest-card">
-              <span className="interest-number">03</span>
-              <span className="interest-icon" aria-hidden="true">
-                ↔
-              </span>
-              <div>
-                <h3>A competitive streak.</h3>
-                <p>Hockey, basketball & gaming</p>
-              </div>
-            </div>
+            {interestCards.map((card) => {
+              const Icon = interestIcons[card.icon];
+              return (
+                <div
+                  key={card.id}
+                  className={`interest-card ${card.id === "riding" ? "riding" : ""} ${card.image ? "has-photo" : ""}`}
+                >
+                  {card.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className="interest-photo"
+                      src={card.image.src}
+                      alt={card.image.alt}
+                      loading="lazy"
+                    />
+                  ) : null}
+                  <span className="interest-number">{card.number}</span>
+                  <Icon
+                    className="interest-icon"
+                    aria-hidden="true"
+                    strokeWidth={1.25}
+                  />
+                  <div>
+                    <h3>{card.title}</h3>
+                    <p>{card.caption}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
         <section className="contact-section section-wrap">
-          <span className="overline">03 / WHAT’S NEXT?</span>
+          <span className="overline">04 / WHAT’S NEXT?</span>
           <div className="contact-heading">
             <h2>
               Good things start
@@ -319,19 +431,23 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
               with <span>a conversation.</span>
             </h2>
             <a
-              href={`mailto:${profileData.contact.email}`}
+              href={booking ?? `mailto:${email}`}
               className="contact-arrow"
-              aria-label="Email Arthur"
+              aria-label={booking ? "Book a call with Arthur" : "Email Arthur"}
             >
               ↗
             </a>
           </div>
-          <a
-            className="email-link"
-            href={`mailto:${profileData.contact.email}`}
-          >
-            {profileData.contact.email}
-          </a>
+          <div className="contact-links">
+            <a className="email-link" href={`mailto:${email}`}>
+              {email}
+            </a>
+            {booking ? (
+              <a href={booking} target="_blank" rel="noreferrer">
+                Book a call ↗
+              </a>
+            ) : null}
+          </div>
         </section>
       </main>
       <footer className="site-footer">
@@ -359,7 +475,9 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
       <dialog
         ref={dialog}
         className="chat-dialog"
-        onCancel={closeChat}
+        onClose={() => {
+          document.body.style.overflow = "";
+        }}
         onClick={(event) => {
           if (event.target === dialog.current) closeChat();
         }}
@@ -373,16 +491,15 @@ export default function PersonalPage({ chatReady }: { chatReady: boolean }) {
         </div>
         {!chatReady && (
           <p className="chat-setup-note">
-            AI chat is awaiting connection in this preview. You can explore
-            Arthur’s profile below or{" "}
-            <a href={`mailto:${profileData.contact.email}`}>
-              get in touch directly
-            </a>
-            .
+            AI chat is unavailable in this preview. You can explore Arthur’s
+            profile on the page or{" "}
+            <a href={`mailto:${email}`}>get in touch directly</a>.
           </p>
         )}
         <div className="dialog-chat">
-          {chatOpened && <ChatPanel enabled={chatReady} />}
+          {chatOpened && (
+            <ChatPanel enabled={chatReady} pendingPrompt={pendingPrompt} />
+          )}
         </div>
       </dialog>
     </div>

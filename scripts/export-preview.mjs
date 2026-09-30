@@ -33,6 +33,19 @@ await cp(
   resolve(output, "icon.svg"),
 );
 await cp(resolve(root, ".next/server/app/icon.body"), resolve(output, "icon"));
+// Link previews and crawlers: the share image, robots.txt, and sitemap.xml.
+await cp(
+  resolve(root, ".next/server/app/opengraph-image.body"),
+  resolve(output, "opengraph-image"),
+);
+await cp(
+  resolve(root, ".next/server/app/robots.txt.body"),
+  resolve(output, "robots.txt"),
+);
+await cp(
+  resolve(root, ".next/server/app/sitemap.xml.body"),
+  resolve(output, "sitemap.xml"),
+);
 console.log(
   "Packaged the static design preview. AI chat remains available in the full Next.js app when configured.",
 );

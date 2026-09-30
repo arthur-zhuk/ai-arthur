@@ -24,7 +24,6 @@ html {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100dvh;
 }
 
 body {
@@ -32,7 +31,6 @@ body {
   padding: 0;
   width: 100%;
   min-height: 100dvh;
-  overflow: hidden;
 }
 
 body {
@@ -52,28 +50,6 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 140 140' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.12'/%3E%3C/svg%3E");
   mix-blend-mode: soft-light;
   z-index: 0;
-}
-
-.page {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  background:
-    linear-gradient(90deg, rgba(242, 232, 214, 0.04) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(242, 232, 214, 0.03) 1px, transparent 1px);
-  background-size: 92px 92px;
-}
-
-.page-center {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  width: 100%;
-  max-width: 1240px;
-  margin: 0 auto;
 }
 
 .eyebrow {
@@ -100,8 +76,8 @@ body::before {
   position: relative;
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 44%) minmax(0, 56%);
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   overflow: hidden;
   border: 1px solid var(--border);
@@ -158,7 +134,6 @@ body::before {
   border-radius: inherit;
 }
 
-.profile-panel,
 .conversation-panel {
   position: relative;
   z-index: 1;
@@ -167,112 +142,11 @@ body::before {
   min-height: 0;
 }
 
-.profile-panel {
-  padding: clamp(26px, 3vw, 46px);
-  border-right: 1px solid var(--border);
-}
-
-.profile-topline,
 .conversation-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.profile-topline .eyebrow {
-  line-height: 1.4;
-}
-
-.profile-intro {
-  margin-top: clamp(52px, 10vh, 120px);
-}
-
-.profile-greeting {
-  margin: 0 0 12px;
-  color: var(--accent-strong);
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.profile-intro h1 {
-  margin: 0;
-  font-size: clamp(3.3rem, 5.4vw, 5.5rem);
-  font-weight: 600;
-  line-height: 0.98;
-}
-
-.profile-last-name {
-  display: block;
-}
-
-.profile-period {
-  color: var(--accent);
-}
-
-.profile-summary {
-  max-width: 36ch;
-  margin: 26px 0 0;
-  color: var(--muted-strong);
-  font-size: 1.04rem;
-  line-height: 1.6;
-}
-
-.profile-bottom {
-  margin-top: auto;
-  padding-top: 28px;
-}
-
-.profile-experience {
-  max-width: 40ch;
-  margin: 0 0 30px;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.6;
-}
-
-.profile-experience strong {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.profile-links {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--border);
-}
-
-.profile-links a {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 48px;
-  border-bottom: 1px solid var(--border);
-  padding-right: 14px;
-  color: var(--text);
-  font-size: 0.83rem;
-  font-weight: 600;
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.profile-links a:nth-child(odd) {
-  margin-right: 12px;
-}
-
-.profile-links a:nth-child(even) {
-  margin-left: 12px;
-}
-
-.profile-links a:hover,
-.profile-links a:focus-visible {
-  color: var(--accent-strong);
-}
-
-.profile-links svg {
-  flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .conversation-panel {
@@ -774,24 +648,6 @@ body::before {
   color: var(--muted);
 }
 
-.audio-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 12px;
-}
-
-.audio-bars .bar {
-  width: 3px;
-  background-color: var(--accent);
-  animation: bounce 1.2s ease-in-out infinite;
-  border-radius: 2px;
-}
-
-.audio-bars .bar:nth-child(1) { animation-delay: 0s; height: 100%; }
-.audio-bars .bar:nth-child(2) { animation-delay: -0.2s; height: 70%; }
-.audio-bars .bar:nth-child(3) { animation-delay: -0.4s; height: 80%; }
-
 .icon-button {
   display: grid;
   place-items: center;
@@ -815,16 +671,6 @@ body::before {
 
 .icon-button:active {
   transform: translateY(1px) scale(0.97);
-}
-
-.audio-now-playing {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 0.72rem;
-  animation: fadeSlide 0.3s ease both;
 }
 
 .thinking-skeleton {
@@ -869,11 +715,6 @@ body::before {
   color: rgba(255, 233, 223, 0.78);
 }
 
-@keyframes bounce {
-  0%, 100% { transform: scaleY(0.4); }
-  50% { transform: scaleY(1); }
-}
-
 @keyframes fadeSlide {
   from {
     opacity: 0;
@@ -894,116 +735,69 @@ body::before {
   }
 }
 
-@media (min-width: 769px) {
-  .page {
-    padding: 18px;
-    align-items: center;
-    justify-content: center;
-  }
-  .page-center {
-    height: min(calc(100dvh - 36px), 900px);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-  }
-  .chat-panel {
-    border-radius: inherit;
-  }
-}
-
 @media (max-width: 768px) {
-  .chat-panel {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    border-radius: 0;
-  }
-  .profile-panel {
-    padding: max(18px, env(safe-area-inset-top)) 22px 18px;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .profile-topline .eyebrow {
-    font-size: 0.64rem;
-  }
-  .profile-intro {
-    margin-top: 18px;
-  }
-  .profile-greeting {
-    margin-bottom: 4px;
-    font-size: 0.75rem;
-  }
-  .profile-intro h1 {
-    font-size: 2.55rem;
-    line-height: 0.95;
-  }
-  .profile-last-name {
-    display: inline;
-  }
-  .profile-summary {
-    max-width: 50ch;
-    margin-top: 10px;
-    font-size: 0.82rem;
-    line-height: 1.4;
-  }
-  .profile-bottom {
-    padding-top: 14px;
-  }
-  .profile-experience {
-    margin-bottom: 12px;
-    font-size: 0.72rem;
-    line-height: 1.4;
-  }
-  .profile-links a {
-    min-height: 35px;
-    font-size: 0.72rem;
-  }
   .conversation-panel {
     padding: 16px 22px max(16px, env(safe-area-inset-bottom));
   }
+
   .conversation-header {
     min-height: 34px;
     padding-bottom: 12px;
   }
+
   .chat-welcome {
     margin-top: 18px;
   }
+
   .chat-welcome > p {
     font-size: 1.45rem;
   }
+
   .chip-row {
     margin-top: 8px;
     gap: 6px;
   }
+
   .chip {
     padding: 6px 10px;
     font-size: 0.7rem;
   }
+
   .starter-prompts {
     margin-top: 14px;
   }
+
   .starter-prompt {
     min-height: 54px;
     gap: 9px;
     grid-template-columns: 24px minmax(0, 1fr) 18px;
   }
+
   .starter-prompt strong {
     font-size: 0.78rem;
   }
+
   .starter-prompt small {
     font-size: 0.68rem;
   }
+
   .chat-thread {
     padding-top: 12px;
     padding-bottom: 12px;
   }
+
   .chat-input {
     padding: 7px;
   }
+
   .chat-input button {
     width: 44px;
   }
+
   .bubble {
     max-width: 96%;
   }
+
   .followup-inline {
     padding-top: 10px;
     margin-top: 0;
@@ -1011,13 +805,6 @@ body::before {
 }
 
 @media (max-width: 400px) {
-  .profile-panel {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-  .profile-intro h1 {
-    font-size: 2.25rem;
-  }
   .conversation-panel {
     padding-left: 16px;
     padding-right: 16px;
@@ -1025,88 +812,56 @@ body::before {
 }
 
 @media (max-width: 768px) and (max-height: 650px) {
-  .profile-panel {
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-  .profile-intro {
-    margin-top: 8px;
-  }
-  .profile-greeting {
-    margin-bottom: 2px;
-  }
-  .profile-intro h1 {
-    font-size: 2rem;
-  }
-  .profile-summary {
-    display: none;
-  }
-  .profile-bottom {
-    padding-top: 8px;
-  }
-  .profile-experience {
-    margin-bottom: 7px;
-    font-size: 0.68rem;
-  }
-  .profile-links a {
-    min-height: 28px;
-  }
   .conversation-panel {
     padding-top: 10px;
     padding-bottom: 10px;
   }
+
   .conversation-header {
     padding-bottom: 8px;
   }
+
   .chat-welcome {
     margin-top: 8px;
   }
+
   .chat-welcome > p {
     font-size: 1.22rem;
   }
+
   .starter-prompts {
     margin-top: 9px;
   }
+
   .starter-prompt {
     min-height: 44px;
     padding-top: 5px;
     padding-bottom: 5px;
   }
+
   .chat-thread {
     padding-top: 8px;
     padding-bottom: 8px;
   }
+
   .chat-input {
     padding: 5px;
   }
 }
 
 @media (min-width: 769px) and (max-height: 700px) {
-  .profile-panel {
-    padding: 24px 30px;
-  }
-  .profile-intro {
-    margin-top: 30px;
-  }
-  .profile-intro h1 {
-    font-size: 3.7rem;
-  }
-  .profile-summary {
-    margin-top: 16px;
-    font-size: 0.92rem;
-  }
-  .profile-experience {
-    margin-bottom: 16px;
-  }
   .conversation-panel {
     padding: 22px 32px;
   }
+
   .chat-welcome {
     margin-top: 26px;
   }
+
   .starter-prompts {
     margin-top: 22px;
   }
+
   .starter-prompt {
     min-height: 58px;
   }
